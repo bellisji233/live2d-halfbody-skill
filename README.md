@@ -31,6 +31,8 @@ The agent redraws your illustration or description into a version that separates
 - **Accessories**: glasses, earrings, chokers and hanging ribbons are removed; a necklace stays only as a thin chain on the clothing with at most one pendant; hats sit on top of the head without covering the forehead or eyebrows.
 - **Blush**: soft blush on the cheeks.
 
+For hairstyles or accessories outside this list (twin tails, glasses), ask the agent to extend the skill: add drawing rules, adjust the layer-splitting and rigging code, then check the result in VTube Studio.
+
 ## What you do
 
 1. Approve the illustration the agent generates.
