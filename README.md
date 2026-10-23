@@ -6,6 +6,8 @@ Give an AI agent (such as Claude Code) one character illustration or a text desc
 
 ![Second character: rest pose, three gestures, head turn during a gesture, blush](assets/示例.jpg)
 
+![Two characters in VTube Studio: talking, blinking, head turns, hair and pendant swinging](assets/demo.gif)
+
 ## Features
 
 - Head turns left/right and up/down (±30); the body leans when the head tilts; body follow and breathing
