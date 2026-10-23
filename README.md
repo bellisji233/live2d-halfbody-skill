@@ -19,7 +19,7 @@ Give an AI agent (such as Claude Code) one character illustration or a text desc
 - Glasses follow the face
 - Hotkeys: smiling eyes, O-shaped mouth, angry, troubled; wave, open hands and pointing gestures; blush
 
-Not supported: large head turns, full body, arms following the camera continuously. Not yet tested: twin tails (in progress).
+Not supported: large head turns, full body, arms following the camera continuously. Not yet tested: twin tails.
 
 The output is a model file VTube Studio loads directly (.moc3), not a Cubism Editor project, so the Editor can't open it. For production-grade results (finer physics, more expressions), import the separated layers into Cubism Editor and rig them again. Suited to front-facing half-body characters with short hair or hair past the shoulders.
 
@@ -63,7 +63,7 @@ Tested on macOS. Not tested on Windows.
 2. Install dependencies: `pip install -r requirements.txt`
 3. Tell the agent "Make a VTube Studio avatar from this illustration" with the image path, or describe the character you want.
 
-One character takes 20–24 generated images and one See-through run; from illustration to VTube Studio is about an hour, see [FAQ](#faq).
+One character takes 19–24 generated images and one See-through run; from illustration to VTube Studio is about an hour, see [FAQ](#faq).
 
 ## FAQ
 
@@ -75,7 +75,7 @@ Timings from the third character (glasses):
 |---|---|---|
 | 1. Generate the illustration (Codex) | about 1.5 min | Agent |
 | 2. Approve the illustration | — | You |
-| 3. Generate 15–19 variants: eyes closed, mouth open, hair removed, etc. (Codex, about 1.5 min each) | about 23–30 min | Agent |
+| 3. Generate 14–19 variants: eyes closed, mouth open, hair removed, etc. (Codex, about 1.5 min each) | about 20–30 min | Agent |
 | 4. See-through layer separation (Hugging Face, runs alongside step 3) | about 5 min | Agent, asks you before uploading |
 | 5. Split layers and merge with the See-through result | about 2 min | Agent |
 | 6. Blush and three gestures: 4 more images | about 7 min | Agent |
@@ -83,7 +83,7 @@ Timings from the third character (glasses):
 | 8. Self-check, install into VTube Studio | 1–2 min | Agent |
 | 9. Check the avatar in VTube Studio | 5–10 min | You |
 
-Machine time adds up to about 35–45 minutes; with your approval and check, a character can be in VTube Studio within an hour if nothing goes wrong. The number of variants depends on whether the character has a hat, bangs, side hair and pendants.
+Machine time adds up to about 30–45 minutes; with your approval and check, a character can be in VTube Studio within an hour if nothing goes wrong. The number of variants depends on whether the character has a hat or hair accessory, bangs, side hair in front of the ears, and pendants.
 
 When the Codex or See-through quota runs out, the run stops at that step. Run it again once the quota resets; images already generated are not redone.
 

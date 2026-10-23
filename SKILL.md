@@ -51,12 +51,22 @@ description: 从一张立绘或一段角色描述，做出能在 VTube Studio �
 
 ## 步骤
 
+命令都在用户的工作目录（放 `素材/`、`角色/` 的地方）里跑，命令前加 `PYTHONPATH=<skill 目录>`（如 `~/.claude/skills/live2d-halfbody`），Python 才找得到 `rigkit`。
+
+### 0. 检查环境
+
+```
+python -m rigkit.doctor
+```
+
+有 ✗ 的先处理完再出图，否则会在出完二十来张图之后才卡住。! 只影响一部分：没有 See-through 令牌时匿名额度不一定够，没有 ffmpeg 时出不了自查短片。
+
 ### 1. 立绘 —— 用户确认
 
-把 `references/提示词/标准/` 整个复制到 `素材/角色名/prompts/`，先填好 `A0-base.txt` 里的 `[[…]]`（外貌、短发或长发）。
+把 `references/提示词/标准/` 整个复制到 `素材/角色名/prompts/`，先填好 `A0-base.txt` 里的 `[[…]]`（外貌、刘海、两侧头发、头发长短、眼镜、耳坠）。
 
 - 只有描述：照描述填，生成立绘。
-- 有立绘：存为 `素材/角色名/参考.png`，生成时作为参考图附上，得到一张按绑定要求画的版本（脖子露出、刘海不遮眉、侧发盖住耳朵到下巴为止、平光、白底、手臂和身体之间留缝）。原图不满足这些要求时，直接拆会在动起来时出问题。
+- 有立绘：存为 `素材/角色名/参考.png`，生成时作为参考图附上，得到一张按绑定要求画的版本（脖子露出；有刘海时停在眉毛以上；两侧头发盖住耳朵到下巴为止，或别在耳后；平光、白底、手臂和身体之间留缝）。原图不满足这些要求时，直接拆会在动起来时出问题。
 
 ```
 python -m rigkit.variants 素材/角色名 A0-base
@@ -68,13 +78,13 @@ python -m rigkit.variants 素材/角色名 A0-base
 
 ### 2. 出图
 
-把 `prompts/` 里其余的 `[[…]]` 换成这个角色的描述；没有帽子删掉 V1，没有挂件删掉 V9。然后：
+把 `prompts/` 里其余的 `[[…]]` 换成这个角色的描述；角色没有的部件删掉对应的提示词：帽子或发饰 V1，耳前的侧发 V2 和 V7，刘海 V3，挂件 V9（S1 里同时删掉那一行，见 [出图](references/出图.md)）。然后：
 
 ```
 python -m rigkit.variants 素材/角色名
 ```
 
-依次生成 17～19 张“整张图改一处”的变体，每张出对位检查图。偏移 4 px 以内、改动只在该改的地方算合格；不合格删掉重出，同一张最多三次。细节见 [出图](references/出图.md)。
+依次生成 14～19 张“整张图改一处”的变体，每张出对位检查图。偏移 4 px 以内、改动只在该改的地方算合格；不合格删掉重出，同一张最多三次。细节见 [出图](references/出图.md)。
 
 ### 3. 拆层 —— 用户同意上传
 
@@ -185,8 +195,8 @@ python -m rigkit.vts 角色/角色名/character.json --install
 
 ## 环境
 
-- **Python 3.10+**：`pip install -r requirements.txt`。出短片要 ffmpeg。
-- **Codex 命令行**（出图）：ChatGPT 桌面版自带，登录 ChatGPT 账号即可；不在默认位置时把环境变量 `CODEX` 指向它。
+- **Python 3.10+**：`pip install -r <skill 目录>/requirements.txt`（系统 Python 不让装时建一个虚拟环境）。出短片要 ffmpeg。
+- **Codex 命令行**（出图）：ChatGPT 桌面版自带，或单独安装的 `codex`（在 PATH 里即可），登录 ChatGPT 账号；都不是时把环境变量 `CODEX` 指向它。
 - **See-through**（拆层），两个网站跑的是同一个模型，至少准备一个：
   - **Hugging Face**（首选，几分钟一次，最高 1280）：不登录时每天的免费显卡时间不一定够跑一次；用户注册免费账号、建一个 Read token，放进环境变量 `HF_TOKEN` 或 `~/.cache/huggingface/token`（`hf auth login` 存的位置），每天约 1～2 次。
   - **魔搭 ModelScope**（备用，免费，最高 1536）：用户注册账号、建一个访问令牌，放进环境变量 `MODELSCOPE_API_TOKEN` 或 `~/.cache/modelscope/token`。要排队，一次可能半小时。1536 的头发轮廓和眼睛比 1280 更接近原画。

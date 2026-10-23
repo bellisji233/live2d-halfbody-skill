@@ -1,7 +1,8 @@
 """Cubism Core (ctypes) 封装。
 
 Core 库的位置：环境变量 CUBISM_CORE；没设时依次找 Cubism Editor 自带的
-JNI 库（导出完整 csm* C API）和 Cubism SDK for Native 里的 Core 动态库。
+JNI 库（导出完整 csm* C API）和 Cubism SDK for Native 里的 Core 动态库
+（当前目录、用户目录或它下一层的 CubismSdkForNative*）。
 Core 由 Live2D 提供，不随本工具分发。
 
 坐标约定（实测 Core 6.0.513）：
@@ -10,7 +11,7 @@ Core 由 Live2D 提供，不随本工具分发。
 - 画布 size / origin 是像素，ppu 把像素换算成模型单位
 """
 from __future__ import annotations
-import ctypes, os
+import ctypes, glob, os
 import numpy as np
 
 CANDIDATES = [
@@ -26,10 +27,16 @@ CANDIDATES = [
 def _find_core():
     if os.environ.get("CUBISM_CORE"):
         return os.environ["CUBISM_CORE"]
-    for c in CANDIDATES:
+    sdk = [os.path.expanduser(f"~/{d}CubismSdkForNative*/{c.split('/', 1)[1]}")
+           for d in ("", "*/") for c in CANDIDATES[3:]]
+    found = [*CANDIDATES,
+             *sorted(glob.glob("/Applications/Live2D Cubism */res/libLive2DCubismCoreJNI.dylib"), reverse=True),
+             *(f for pattern in sdk for f in sorted(glob.glob(pattern), reverse=True))]
+    for c in found:
         if os.path.exists(c):
             return c
-    raise FileNotFoundError("找不到 Cubism Core：设置环境变量 CUBISM_CORE 指向 Core 动态库")
+    raise FileNotFoundError("找不到 Cubism Core：装 Cubism Editor，或下载 Cubism SDK for Native，"
+                            "把环境变量 CUBISM_CORE 设为其中 Core/dll/ 下对应系统的动态库")
 ALIGN_MOC, ALIGN_MODEL = 64, 16
 
 _lib = None

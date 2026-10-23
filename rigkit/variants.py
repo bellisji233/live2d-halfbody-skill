@@ -9,8 +9,8 @@ new, with 参考.* in ART_DIR attached as a reference when there is one;
 the user confirms it before anything else is made. Each variant is an edit
 of the image named in split.BASES (default the base illustration), past
 the hat and bangs steps a character leaves out. Missing
-outputs are generated through the Codex CLI (CODEX env var or the copy
-bundled with ChatGPT.app), one at a time. For every variant a check image
+outputs are generated through the Codex CLI (CODEX env var, `codex` on
+PATH, or the copy bundled with ChatGPT.app), one at a time. For every variant a check image
 check/<NAME>.png shows base | variant | difference, and check/report.json
 lists the drift (px) and the share of the canvas that changed.
 
@@ -20,13 +20,14 @@ at most three times; past that, change the prompt or the plan.
 """
 from __future__ import annotations
 from pathlib import Path
-import json, os, subprocess, sys, tempfile
+import json, os, shutil, subprocess, sys, tempfile
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from .split import load, align, base_of, ORDER
 
-CODEX = os.environ.get('CODEX', '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex')
+CODEX = (os.environ.get('CODEX') or shutil.which('codex')
+         or '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex')
 BASE = 'A0-base'
 REFERENCE = '参考'
 
