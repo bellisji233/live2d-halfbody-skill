@@ -1,0 +1,8 @@
+Use case: stylized-concept. Output one square image at the largest square size available.
+
+Registration: this is a LAYER VARIANT of the attached base image, not a new illustration. Identical camera, identical crop, identical character scale, identical pixel position. The head, the hair silhouette, the shoulders and the torso must land on exactly the same pixels as the base. Do not re-frame, do not zoom, do not recentre, do not redraw the hair, do not change the clothing, do not change the pose, do not change the head angle.
+
+Change exactly ONE thing: the MOUTH. Draw a small rounded "O" — a vertical oval about half the width of the closed smile in the base, with a dark warm interior and a soft lower-lip catchlight. No teeth. Keep the mouth centred on the same spot as the base mouth.
+Everything else is pixel-identical to the base: both eyes unchanged and open exactly as in the base, both eyebrows unchanged and in the same position, the nose unchanged, the blush unchanged, the hair, the clothing, the arms, the framing and the background all unchanged.
+
+Rendering: clean even cel shading with soft edges and uniform warm-brown linework, matching the base exactly. Keep the same line weight as the base — this character's features are drawn with thin, soft strokes, not heavy outlines. No glossy highlights, no specular dots, no 3D shading, no airbrushed gradients. Flat even frontal lighting, NO cast shadows anywhere, no paper grain, no canvas texture. Plain pure white background. No scene, no props, no text, no watermark, no border, no signature.

@@ -1,0 +1,8 @@
+Use case: stylized-concept. Output one square image at the largest square size available.
+
+Registration: this is a LAYER VARIANT of the attached base image, not a new illustration. Identical camera, identical crop, identical character scale, identical pixel position. The head, the hair silhouette, the shoulders and the torso must land on exactly the same pixels as the base. Do not re-frame, do not zoom, do not recentre, do not redraw the hair, do not change the clothing, do not change the pose, do not change the head angle.
+
+Change exactly ONE thing: BOTH EYES, closed in a happy smile. Each eye becomes a single UPWARD-curving arc — the classic "^" smiling eye — drawn in the same soft warm brown as the base lash line, occupying the same area the open eye occupies in the base, with both corners landing on the same pixels as the base eye's corners. No iris, no eye white, no highlight.
+Everything else is pixel-identical to the base: both eyebrows unchanged and in the same position, the mouth unchanged and smiling exactly as in the base, the nose unchanged, the blush unchanged, the hair, the clothing, the arms, the framing and the background all unchanged.
+
+Rendering: clean even cel shading with soft edges and uniform warm-brown linework, matching the base exactly. Keep the same line weight as the base — this character's features are drawn with thin, soft strokes, not heavy outlines. No glossy highlights, no specular dots, no 3D shading, no airbrushed gradients. Flat even frontal lighting, NO cast shadows anywhere, no paper grain, no canvas texture. Plain pure white background. No scene, no props, no text, no watermark, no border, no signature.

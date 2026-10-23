@@ -1,0 +1,8 @@
+Use case: precise-object-edit. Output one square image at the largest square size available.
+
+Registration: this is a LAYER VARIANT of the attached base image, not a new illustration. Identical camera, identical crop, identical character scale, identical pixel position. The head, the shoulders and the torso must land on exactly the same pixels as the base. Do not re-frame, do not zoom, do not recentre.
+
+Change exactly ONE thing: remove the bun on top of her head together with the coral scrunchie around it. Where the bun was, paint the top of the head as a smooth, rounded crown covered with the same caramel hair, strands flowing from the parting toward the back of the head, so the top of the head has a natural rounded silhouette. Do not add a new hairstyle element.
+Everything else is identical to the base: the bangs, the side locks, the outer bob, the star hairclips, the face, the expression, the clothing and the background.
+
+Rendering: clean even cel shading with soft edges and uniform warm-brown linework, matching the base exactly. No glossy highlights, no 3D shading, no cast shadows, no paper grain. Plain pure white background. No text, no watermark, no border, no signature.

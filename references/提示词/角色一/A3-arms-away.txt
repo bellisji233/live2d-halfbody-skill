@@ -1,0 +1,8 @@
+Use case: stylized-concept. Output one square image at the largest square size available.
+
+Registration: this is a LAYER VARIANT of the attached base image, not a new illustration. Identical camera, identical crop, identical character scale, identical pixel position. The head, shoulders and torso must land on the same pixels as the base. Do not re-frame, do not zoom, do not recentre, do not change the expression, the hair design or the clothing design.
+
+Change exactly ONE thing: both arms are lifted straight out to the sides, away from the body, roughly horizontal, so the COMPLETE torso silhouette is visible including both side seams and both armpits, with nothing overlapping the torso.
+Everything else is identical to the base: face, expression, hair, clothing design, framing, background.
+
+Rendering: clean even cel shading with soft edges and uniform warm-brown linework. Flat even frontal lighting, NO cast shadows anywhere, no paper grain, no canvas texture, no heavy gradients, no glow. Plain pure white background. No scene, no props, no ground shadow, no text, no watermark, no border, no signature.

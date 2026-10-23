@@ -1,0 +1,11 @@
+Use case: precise-object-edit. Output one square image at the largest square size available.
+
+Registration: this is a LAYER VARIANT of the attached base image, not a new illustration. Identical camera, identical crop, identical character scale, identical pixel position. The head, the hair, the headwear, the shoulders and the torso must land on exactly the same pixels as the base. Do not re-frame, do not zoom, do not recentre, do not change the expression, the head angle, the hair, the headwear or the clothing design.
+
+Change exactly ONE thing, the pose: both arms are opened out to the sides at chest height, elbows bent, both palms turned up in a relaxed open shrug. Both hands stay below the chin, clear of the side sections in front of the ears and inside the frame; long hair behind her shoulders, if any, stays behind the arms.
+
+The clothing responds to the moved arms the way real fabric does, and only near the arms: both sleeves follow the arms and gather in soft folds at the elbows; the cuffs stay around the wrists and the hands come out of them as in the base; both shoulders of the garment lift slightly with new folds near the armholes. The front of the clothing and everything on it (collar, buttons, bows, pockets, skirt, any necklace or bag strap) stays exactly as in the base. Where the lowered arms used to hang, show what was behind them: the sides of the body and the white background, or the long hair behind them if any.
+
+Hand proportion: from wrist to fingertip the hand must be no longer than the distance from her chin to her eye line. Do not enlarge the hand. The wrist is the same width as the wrist of the lowered arm in the base.
+
+Rendering: match the base image's own rendering exactly: the same soft shading, the same light thin outlines, the same colours and the same amount of detail as the rest of the base. Do not sharpen, do not add texture, folds or detail beyond what the change needs. Flat even frontal lighting, NO cast shadows anywhere, no paper grain, no canvas texture, no glow. Plain pure white background. No scene, no props, no ground shadow, no text, no watermark, no border, no signature.

@@ -1,0 +1,8 @@
+Use case: stylized-concept. Output one square image at the largest square size available.
+
+Registration: this is a LAYER VARIANT of the attached base image, not a new illustration. Identical camera, identical crop, identical character scale, identical pixel position. The head, shoulders and torso must land on the same pixels as the base. Do not re-frame, do not zoom, do not recentre, do not change the expression, the hair design or the clothing design.
+
+Change exactly ONE thing: all of her hair is gathered into the top knot and pulled back behind her head, with the bangs tucked fully behind both ears, so the COMPLETE face is visible: full forehead, natural hairline, both ears drawn completely, both eyebrows, both temples, the full jaw line and the full rounded outline of the skull. No strand of hair crosses the face.
+Everything else is identical to the base: expression, clothing, arms, framing, background.
+
+Rendering: clean even cel shading with soft edges and uniform warm-brown linework. Flat even frontal lighting, NO cast shadows anywhere, no paper grain, no canvas texture, no heavy gradients, no glow. Plain pure white background. No scene, no props, no ground shadow, no text, no watermark, no border, no signature.

@@ -1,0 +1,11 @@
+Use case: stylized-concept. Output one square image at the largest square size available.
+
+Registration: this is a LAYER VARIANT of the attached base image, not a new illustration. Identical camera, identical crop, identical character scale, identical pixel position. The head, shoulders and torso must land on the same pixels as the base. Do not re-frame, do not zoom, do not recentre, do not change the expression, the hair design or the clothing design.
+
+Change exactly ONE thing, the pose: her right arm (viewer's left) is raised in a friendly wave beside her head, open palm at about eye height, elbow bent, fingers relaxed and slightly spread. The other arm stays exactly as in the base.
+
+The clothing must RESPOND to the changed arm the way real fabric does: the rounded sleeve and apricot cuff lift and gather, the armhole and outer edge of the cropped vest shift naturally, and the side of the rib-knit top pulls taut with changed folds. The sage piping, pearl-like snaps and pocket stay attached and follow the garment. Do NOT leave the torso identical to the base — the garment's response is the whole point of this image.
+
+Hand proportion: from wrist to fingertip the hand must be no longer than the distance from her chin to her eye line. Do not enlarge the hand. The wrist must be the same width as the wrist of the lowered arm in the base image.
+
+Rendering: clean even cel shading with soft edges and uniform warm-brown linework. Flat even frontal lighting, NO cast shadows anywhere, no paper grain, no canvas texture, no heavy gradients, no glow. Plain pure white background. No scene, no props, no ground shadow, no text, no watermark, no border, no signature.

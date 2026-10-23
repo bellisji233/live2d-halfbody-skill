@@ -1,0 +1,14 @@
+Use case: precise-object-edit. Output one square image at the largest square size available.
+
+Inputs: the FIRST attached image is the base. The SECOND attached image is the same base with a magenta outline drawn on it; it only shows WHERE the side locks are. The outline is an approximate guide, not an exact edge. Never draw anything magenta.
+
+Registration: this is a LAYER VARIANT of the base image, not a new illustration. Identical camera, identical crop, identical character scale, identical pixel position. The head, the shoulders and the torso must land on exactly the same pixels as the base. Do not re-frame, do not zoom, do not recentre, do not change the pose or the head angle.
+
+Change exactly ONE thing: remove the two SIDE LOCKS. The side locks are the strands of hair that start at each temple, just outside the outer end of each eyebrow, and hang down in front of the ear and along the cheek to about jaw level, including the thin strands that cross over each ear. They are the hair strands inside the magenta outlines; the ears and the face skin inside the outlines are NOT hair.
+Where the side locks were, paint what is behind them:
+- both ears drawn completely: full outer rim, inner ear shapes and earlobe, same size, position, colour and line style as the ears in the base;
+- the cheek and jaw outline continuing smoothly, same line weight as the base;
+- behind the ears, the back hair of the bob continuing naturally: same caramel colour, same wavy strand direction, same shading as the surrounding back hair.
+Everything else is identical to the base: the bangs over the forehead, the bun, the scrunchie, the star hairclips with beads, the outer silhouette of the bob, both eyes, the eyebrows, the nose, the mouth, the blush, the neck, the clothing and the background.
+
+Rendering: clean even cel shading with soft edges and uniform warm-brown linework, matching the base exactly. Keep the same line weight as the base. No glossy highlights, no 3D shading. Flat even frontal lighting, NO cast shadows, no paper grain, no canvas texture. Plain pure white background. No scene, no props, no text, no watermark, no border, no signature.

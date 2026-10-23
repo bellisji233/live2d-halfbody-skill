@@ -1,0 +1,8 @@
+Use case: precise-object-edit. Output one square image at the largest square size available.
+
+Registration: this is a LAYER VARIANT of the attached base image, not a new illustration. Identical camera, identical crop, identical character scale, identical pixel position. The head, the hair silhouette, the shoulders and the torso must land on exactly the same pixels as the base. Do not re-frame, do not zoom, do not recentre, do not change the pose or the head angle, do not redraw anything that is not part of the change.
+
+Change exactly ONE thing: the MOUTH becomes a small downward-curved frown, centred on the same point and the same width as the base mouth.
+Everything else is identical to the base: eyes, eyebrows, nose, blush, face outline, hair, clothing, arms and background.
+
+Rendering: match the base exactly: same clean cel shading, same crisp thin linework and line weight, same colours. Flat even frontal lighting, NO cast shadows, no paper grain, no canvas texture, no glow. Plain pure white background. No text, no watermark, no border, no signature.
