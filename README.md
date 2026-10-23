@@ -8,15 +8,18 @@ Give an AI agent (such as Claude Code) one character illustration or a text desc
 
 ![Two characters in VTube Studio: talking, blinking, head turns, hair and pendant swinging](assets/demo.gif)
 
+![Third character: no bangs, hair tucked behind the ears, glasses, earrings](assets/demo-glasses.gif)
+
 ## Features
 
 - Head turns left/right and up/down (±30); the body leans when the head tilts; body follow and breathing
 - Blinking and winking, eye tracking, eyebrow movement, lip sync, smiling mouth corners
-- Hair physics in sections: bangs, side locks (root and tip swing separately), back hair or bun; long hair follows the body below the shoulders
-- Necklace pendant swings with the body
+- Hair physics in sections: bangs, side locks (root and tip swing separately), back hair or bun; long hair follows the body below the shoulders. Bangs are optional, and the side hair can be tucked behind the ears
+- Necklace pendant swings with the body; drop earrings swing from the earlobes
+- Glasses follow the face
 - Hotkeys: smiling eyes, O-shaped mouth, angry, troubled; wave, open hands and pointing gestures; blush
 
-Not supported: large head turns, full body, arms following the camera continuously. Not yet tested: twin tails (the hair rules cover bangs, chin-length side locks, back hair and buns).
+Not supported: large head turns, full body, arms following the camera continuously. Not yet tested: twin tails (in progress).
 
 The output is a model file VTube Studio loads directly (.moc3), not a Cubism Editor project, so the Editor can't open it. For production-grade results (finer physics, more expressions), import the separated layers into Cubism Editor and rig them again. Suited to front-facing half-body characters with short hair or hair past the shoulders.
 
@@ -25,15 +28,15 @@ The output is a model file VTube Studio loads directly (.moc3), not a Cubism Edi
 The agent redraws your illustration or description into a version that separates cleanly into layers, and you approve it before the next step. The face, hair color, eyes, clothing, palette and art style stay the same; these are adjusted:
 
 - **Framing**: front-facing half body from the top of the head to the waist, plain white background; arms hang at the sides with a gap from the body, hands empty. The three gestures are edited from this pose.
-- **Bangs**: a straight-cut fringe ending above the eyebrows, both eyebrows fully visible so they can move. A character without bangs currently gets bangs added.
-- **Side hair**: one smooth section on each side of the face, covering the ear and ending at the chin; these swing on their own when the head turns.
-- **Long hair**: hangs behind the neck, shoulders and back, not over the shoulders, chest or arms.
+- **Bangs**: optional. With bangs, a straight-cut fringe ending above the eyebrows, both eyebrows fully visible so they can move; without, the whole forehead shows.
+- **Side hair**: either one smooth section on each side of the face, covering the ear and ending at the chin, swinging on its own when the head turns; or tucked behind the ears, which stay visible.
+- **Long hair**: hangs behind the neck, shoulders and back, showing only beside the neck and outside the arms; not over the shoulders, chest or arms.
 - **Neck**: a stretch of neck shows between the chin and the collar, so the chin slides over it when the head turns.
 - **Color and light**: hair and skin in different colors, hair with a thin outline; flat lighting, no cast shadows. Shadows would shift out of place once the parts move.
-- **Accessories**: glasses, earrings, chokers and hanging ribbons are removed; a necklace stays only as a thin chain on the clothing with at most one pendant; hats sit on top of the head without covering the forehead or eyebrows.
+- **Accessories**: glasses stay, drawn with a thin frame and clear lenses without glare; drop earrings stay, with the hair behind the ears; chokers and hanging ribbons are removed; a necklace stays only as a thin chain on the clothing with at most one pendant; hats sit on top of the head without covering the forehead or eyebrows.
 - **Blush**: soft blush on the cheeks.
 
-For hairstyles or accessories outside this list (twin tails, glasses), ask the agent to extend the skill: add drawing rules, adjust the layer-splitting and rigging code, then check the result in VTube Studio.
+For hairstyles or accessories outside this list (twin tails, animal ears), ask the agent to extend the skill: add drawing rules, adjust the layer-splitting and rigging code, then check the result in VTube Studio.
 
 ## What you do
 

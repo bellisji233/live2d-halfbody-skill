@@ -279,12 +279,13 @@ class Rig:
         else:
             op = (1-min(o/.04, 1)) if tag == 'Closed' else (min(o/.04, 1) if tag == 'Open' else 0.)
         if tag == 'Open' and not selected:
-            # the open mouth grows from the closed line; skin around it stays
-            upper, lower, closed = self.ctx.mouth_contours(v[:, 0])
-            nu = closed+(upper-closed)*o
-            nl = closed+1+(lower-closed-1)*o
+            # the open mouth grows from the closed line: the whole layer (the mouth
+            # alone) is scaled toward it, so the lips land on it as the mouth closes.
+            # Fitted to each column's own lips instead, the steep sides at the
+            # corners shear and the outline fans out into streaks
+            _, _, closed = self.ctx.mouth_contours(v[:, 0])
             top, bottom = m['open_band']
-            warped = _remap_band(v[:, 1], top, upper, lower, bottom, nu, nl)
+            warped = closed+(v[:, 1]-closed)*o
             w = np.clip((m['open_half']-np.abs(v[:, 0]-m['open_centre']))/m['open_feather'], 0, 1)
             inside = (v[:, 1] > top) & (v[:, 1] < bottom)
             v[inside, 1] += (warped-v[:, 1])[inside]*w[inside]
@@ -421,11 +422,3 @@ class Rig:
         return out
 
 
-def _remap_band(y, top, upper, lower, bottom, new_upper, new_lower):
-    """Monotone warp: the band between upper and lower moves, the skin
-    above and below stretches, the outer edges stay."""
-    return np.where(y < upper,
-                    top+(y-top)*(new_upper-top)/np.maximum(upper-top, 1),
-                    np.where(y < lower,
-                             new_upper+(y-upper)*(new_lower-new_upper)/np.maximum(lower-upper, 1),
-                             new_lower+(y-lower)*(bottom-new_lower)/np.maximum(bottom-lower, 1)))

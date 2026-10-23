@@ -21,13 +21,13 @@ from PIL import Image, ImageFont
 
 from .config import Character
 
-REQUIRED = ['Face_Skin', 'Neck', 'Hair_Back', 'Hair_Bang', 'Hair_Side_L', 'Hair_Side_R',
+REQUIRED = ['Face_Skin', 'Neck', 'Hair_Back',
             'Eye_White_L', 'Eye_White_R', 'Iris_L', 'Iris_R', 'Eye_Open_L', 'Eye_Open_R',
             'Eye_Closed_L', 'Eye_Closed_R', 'Brow_Neutral_L', 'Brow_Neutral_R',
             'Mouth_Closed', 'Mouth_Open', 'Nose', 'Ear_L', 'Ear_R']
 OPTIONAL = ['Eye_Smile_L', 'Eye_Smile_R', 'Eye_Lower_L', 'Eye_Lower_R', 'Eye_Crease_L', 'Eye_Crease_R',
             'Brow_Angry_L', 'Brow_Angry_R', 'Brow_Troubled_L', 'Brow_Troubled_R', 'Mouth_O', 'Mouth_Line',
-            'Mouth_Frown', 'Blush_L', 'Blush_R', 'Cheek_Flush_L', 'Cheek_Flush_R', 'Hair_Bun',
+            'Mouth_Frown', 'Blush_L', 'Blush_R', 'Cheek_Flush_L', 'Cheek_Flush_R', 'Hair_Side_L', 'Hair_Side_R', 'Hair_Bang', 'Hair_Front', 'Hair_Bun', 'Glasses',
             'Eye_Open_Over_L', 'Eye_Open_Over_R']       # lash tips drawn over the front hair
 # how far each kind of layer moves (px on a ~335 px wide face), for the shift test
 MOVES = [('Hair_Side_', 30., 8.), ('Hair_Bang', 14., 8.), ('Hair_Bun', 14., 10.),

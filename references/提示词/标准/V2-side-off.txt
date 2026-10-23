@@ -2,7 +2,7 @@ Use case: precise-object-edit. Output one square image at the largest square siz
 
 Registration: this is a LAYER VARIANT of the attached base image, not a new illustration. Identical camera, identical crop, identical character scale, identical pixel position. The head, the hair silhouette, the shoulders and the torso must land on exactly the same pixels as the base. Do not re-frame, do not zoom, do not recentre, do not change the pose or the head angle, do not redraw anything that is not part of the change.
 
-Change exactly ONE thing: remove the two SIDE SECTIONS of hair, the straight sections that hang down in front of each ear beside the cheeks to about chin level, together with any hair clips on them. The bangs over the forehead stay exactly as they are.
+Change exactly ONE thing: remove the two SIDE SECTIONS of hair, the straight sections that hang down in front of each ear beside the cheeks to about chin level, together with any hair clips on them. Any bangs over the forehead stay exactly as they are.
 Where the side sections were, paint what is behind them:
 - both ears drawn completely: outer rim, inner ear shapes and earlobe, natural size and position, same skin colour and line style as the face;
 - the cheek and jaw outline continuing smoothly, same line weight as the base;

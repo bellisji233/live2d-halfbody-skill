@@ -132,13 +132,23 @@ class Context:
         lower = np.array([np.where(mouth[:, x])[0].max() for x in cols])
         u = (cols-m['curve']['centre'])/m['curve']['half']
         self.mouth_curves = (np.polyfit(u, upper, 4), np.polyfit(u, lower, 4))
+        # the lips as drawn, column by column (lightly smoothed), soft rim
+        # included: a curve fitted over the whole mouth runs inside the steep
+        # sides at the corners, and the outline left outside it fans out into
+        # streaks as the mouth closes
+        drawn = _alpha(self.char.part(m['open_layer'])) > 16
+        cols = np.where(drawn.any(axis=0))[0]
+        top = np.array([np.where(drawn[:, x])[0].min() for x in cols])
+        bottom = np.array([np.where(drawn[:, x])[0].max() for x in cols])
+        smooth1 = lambda a: cv2.GaussianBlur(a.astype(np.float32)[None, :], (0, 0), 1.).ravel()
+        self.mouth_edges = (cols.astype(np.float32), smooth1(top), smooth1(bottom))
 
     def mouth_contours(self, x):
         m = self.char['mouth']
         u = np.clip((x-m['curve']['centre'])/m['curve']['half'], -.98, .98)
-        pu, pl = self.mouth_curves
-        upper = np.polyval(pu, u)
-        lower = np.maximum(upper+3, np.polyval(pl, u))
+        cols, up, lo = self.mouth_edges
+        upper = np.interp(x, cols, up)
+        lower = np.maximum(upper+3, np.interp(x, cols, lo))
         y0, k = m['closed_line']
         return upper, lower, y0-k*u*u
 

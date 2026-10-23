@@ -8,7 +8,8 @@ kinds are used:
   label maps   S1 (the base) and V4 (the head without its front hair), each
                region filled with one flat colour (PALETTE): which layer a
                pixel belongs to;
-  peels        V1 hat off -> V2 side hair off -> V3 bangs off, V5 blank face,
+  peels        V1 hat off -> V2 side hair off -> V3 bangs off (each only when
+               the character has the part), V5 blank face,
                V6 no iris, D* expressions, V9 dangles off: what is behind a
                part, and the part itself as the difference
 
@@ -37,13 +38,25 @@ BASES = {'V2-side-off': 'V1-hat-off', 'V3-bangs-off': 'V2-side-off', 'V4-skin-ma
          'V5-blank-face': 'V3-bangs-off', 'D7-brows-angry': 'V3-bangs-off', 'D8-brows-troubled': 'V3-bangs-off',
          'V7-ears-clear': 'V3-bangs-off', 'V8-head-off': 'V3-bangs-off',
          'F1-blush': 'R0-rest', 'P1-wave': 'R0-rest', 'P2-explain': 'R0-rest', 'P3-point': 'R0-rest'}
+# steps a character without a hat, side locks or bangs leaves out; the variants
+# that would edit one edit the step before it (no bangs: V4 edits V2)
+SKIPPABLE = ('V1-hat-off', 'V2-side-off', 'V3-bangs-off')
 ORDER = ['S1-segment', 'V1-hat-off', 'V2-side-off', 'V3-bangs-off', 'V4-skin-mask', 'V5-blank-face', 'V6-no-iris',
          'D1-mouth-open', 'D2-mouth-o', 'D3-mouth-line', 'D4-mouth-frown', 'D5-eyes-closed', 'D6-eyes-smile',
          'D7-brows-angry', 'D8-brows-troubled', 'B0-black-bg', 'V7-ears-clear', 'V8-head-off', 'V9-dangles-off']
-REQUIRED = ['S1-segment', 'V2-side-off', 'V3-bangs-off', 'V4-skin-mask', 'V5-blank-face', 'V6-no-iris',
+REQUIRED = ['S1-segment', 'V4-skin-mask', 'V5-blank-face', 'V6-no-iris',
             'D1-mouth-open', 'D5-eyes-closed']
 MOUTHS = {'Open': 'D1-mouth-open', 'O': 'D2-mouth-o', 'Line': 'D3-mouth-line', 'Frown': 'D4-mouth-frown'}
 BROWS = {'Angry': 'D7-brows-angry', 'Troubled': 'D8-brows-troubled'}
+
+
+def base_of(name, present):
+    """The image a variant edits, past the steps this character leaves out.
+    present(n): whether the character has variant n."""
+    b = BASES.get(name, BASE)
+    while b in SKIPPABLE and not present(b):
+        b = BASES.get(b, BASE)
+    return b
 
 
 # ------------------------------------------------------------------ images
@@ -700,7 +713,7 @@ def plan(art, out, pad_top=0, hat='Hat', log=print):
         fig_a = two_background_alpha(B, K, fig_a)
     fig = fig_a > .5
     S = label_map(s1, fig, LABEL_ORDER)
-    v3 = V('V3-bangs-off'); v5 = V('V5-blank-face')
+    v3 = V(base_of('V5-blank-face', have)); v5 = V('V5-blank-face')     # the head without its front hair
     # V4 recolours only the head: an unchanged pixel that happens to be near
     # a palette colour (a mint cardigan next to neck cyan) is not a label
     v4 = V('V4-skin-mask')
@@ -729,9 +742,8 @@ def plan(art, out, pad_top=0, hat='Hat', log=print):
         # shoulders the long hair moves with the body anyway)
         near_side = dilate(S['side'], 24)
         strays = np.logical_or.reduce([c for c in components(strays, 1) if (c & near_side).any()] or [np.zeros(fig.shape, bool)])
-    peels = [('Hair_Bang', 'bang', 'V2-side-off', 'V3-bangs-off')]
-    side_with = 'V1-hat-off' if have('V1-hat-off') else BASE
-    peels.append(('Hair_Side', 'side', side_with, 'V2-side-off'))
+    peels = [(name, key, base_of(wo, have), wo) for name, key, wo in
+             [('Hair_Bang', 'bang', 'V3-bangs-off'), ('Hair_Side', 'side', 'V2-side-off')] if have(wo)]
     for name, key, w, wo in peels:
         hidden = dilate(above, 6)
         ext, _ = change_mask(V(w) if w != BASE else B, V(wo), strong=40, close=9, min_area=80)

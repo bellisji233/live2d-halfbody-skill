@@ -111,6 +111,9 @@ def infer_role(name, locks):
     if name.startswith('Hair_Back'):
         # behind the head: turns with it, no swing, not held by the neck
         return dict(role='hair', neck_hold='none', warp='Face')
+    if name == 'Hair_Front':
+        # along the hairline (no bangs): turns with the face it borders, no swing
+        return dict(role='hair', neck_hold='none', warp='Face')
     if name.startswith('Hair_'):
         return dict(role='hair', side=side)
     if name == 'Neck':

@@ -2,7 +2,7 @@ Use case: precise-object-edit. Output one square image at the largest square siz
 
 Registration: this is a LAYER VARIANT of the attached base image, not a new illustration. Identical camera, identical crop, identical character scale, identical pixel position. The head, the hair silhouette, the shoulders and the torso must land on exactly the same pixels as the base. Do not re-frame, do not zoom, do not recentre, do not change the pose or the head angle, do not redraw anything that is not part of the change.
 
-Change exactly ONE thing: remove both eyes, both eyebrows, the nose and the mouth, painting plain smooth face skin where they were, with the same warm skin colour and even lighting as the surrounding face. Keep the soft pink blush on both cheeks exactly as it is. The face outline, ears, hairline and everything else stay exactly as in the base.
+Change exactly ONE thing: remove both eyes, both eyebrows, the nose and the mouth, painting plain smooth face skin where they were, with the same warm skin colour and even lighting as the surrounding face. Keep the soft pink blush on both cheeks exactly as it is. The face outline, ears, hairline, any glasses and earrings and everything else stay exactly as in the base.
 Everything else is identical to the base: the hair, the ears, the neck, the clothing, the arms and the background.
 
 Rendering: match the base exactly: same clean cel shading, same crisp thin linework and line weight, same colours. Flat even frontal lighting, NO cast shadows, no paper grain, no canvas texture, no glow. Plain pure white background. No text, no watermark, no border, no signature.

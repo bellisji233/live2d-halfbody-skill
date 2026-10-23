@@ -7,7 +7,8 @@ check each one: how far it drifted from its base, and where it changed.
 ART_DIR holds A0-base.png and prompts/<NAME>.txt. A0-base is generated
 new, with 参考.* in ART_DIR attached as a reference when there is one;
 the user confirms it before anything else is made. Each variant is an edit
-of the image named in BASES (default the base illustration). Missing
+of the image named in split.BASES (default the base illustration), past
+the hat and bangs steps a character leaves out. Missing
 outputs are generated through the Codex CLI (CODEX env var or the copy
 bundled with ChatGPT.app), one at a time. For every variant a check image
 check/<NAME>.png shows base | variant | difference, and check/report.json
@@ -23,7 +24,7 @@ import json, os, subprocess, sys, tempfile
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from .split import load, align, BASES, ORDER
+from .split import load, align, base_of, ORDER
 
 CODEX = os.environ.get('CODEX', '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex')
 BASE = 'A0-base'
@@ -110,7 +111,7 @@ def main():
                 break
             print(f'{BASE}: 已生成，给用户确认；不满意删掉重出', flush=True)
             continue
-        base = BASES.get(name, BASE)
+        base = base_of(name, lambda n: (art/'prompts'/f'{n}.txt').exists())
         if not (art/'prompts'/f'{name}.txt').exists():
             continue                                    # left out for this character (no hat, no dangles)
         if not (art/f'{base}.png').exists():

@@ -4,10 +4,10 @@ Registration: this is a LAYER VARIANT of the attached base image, not a new illu
 
 Change exactly ONE thing: recolour the character as a flat colour map. Every region becomes ONE flat solid colour, no lines, no shading, no gradients, no texture, exactly following that region's outline in the base:
 - the headwear, including everything attached to it: pure red #FF0000 (leave this line out when there is no headwear);
-- the bangs (the straight-cut fringe over the forehead): pure blue #0000FF;
+- the bangs (the straight-cut fringe over the forehead): pure blue #0000FF (leave this line out when there are no bangs);
 - the two side sections of hair hanging in front of the ears: pure green #00FF00;
 - any other visible hair (the top of the head, hair behind the side sections, long hair behind the shoulders and beside the arms): pure yellow #FFFF00;
-- the face, including the forehead, cheeks, jaw, ears, eyes, eyebrows, nose and mouth (all inside the face filled the same): pure magenta #FF00FF;
+- the face, including the forehead, cheeks, jaw, ears, eyes, eyebrows, nose and mouth (all inside the face filled the same), and any glasses and earrings: pure magenta #FF00FF;
 - the neck, from under the jaw down to the collar: pure cyan #00FFFF;
 - everything else of the character (all clothing, collar, bows, any necklace and pendant, bags and straps, arms, hands): pure orange #FF8000.
 The background stays plain pure white. The silhouette of the character is exactly the same as in the base.

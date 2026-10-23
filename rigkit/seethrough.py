@@ -39,7 +39,7 @@ import cv2
 from PIL import Image
 
 from .split import (Stack, load, components, _u8, dilate, erode, keep_large, fill_holes, hue_distance, rest_image, sheet,
-                    figure_alpha)
+                    figure_alpha, lum)
 
 ST_PARTS = {                      # our layer -> See-through layers, bottom first
     'Hair_Back': ['back hair'],
@@ -96,11 +96,11 @@ def offset_field(diff, known, sigma=(6., 24., 80.)):
     return out
 
 
-def st_shapes(S, R, H, W, over_locks=None):
+def st_shapes(S, R, H, W, over_locks=None, parts=ST_PARTS):
     """Our layers cut from See-through's: the big parts, the front hair split into
     our locks, and the eyes and brows (shape and See-through's colour).
     over_locks: what our split draws above all the locks (the hat)."""
-    shapes = {k: over([S[n] for n in v if n in S]) for k, v in ST_PARTS.items()}
+    shapes = {k: over([S[n] for n in v if n in S]) for k, v in parts.items() if any(n in S for n in v)}
     if 'Neck' in R and 'Body' in R:
         # See-through's clothes run on over the neck seen in the collar opening
         # (it puts the neck under them); our body has the opening, as our split had it
@@ -109,11 +109,12 @@ def st_shapes(S, R, H, W, over_locks=None):
         rgb, a = shapes['Body']
         shapes['Body'] = (rgb, (a*(1-hole)).astype(np.float32))
     front_rgb, front_a = S['front hair']
+    locks = [n for n in LOCKS if n in R]                           # no bangs: no Hair_Bang
 
     # the front hair is cut into the locks along our split; pixels none of our
     # locks claims go to the nearest one
     lab = np.full((H, W), -1, np.int32)
-    for i, n in enumerate(LOCKS):                                  # later locks lie on top
+    for i, n in enumerate(locks):                                  # later locks lie on top
         lab[R[n][1] > .5] = i
     if (lab >= 0).any():
         _, idx = cv2.distanceTransformWithLabels((lab < 0).astype(np.uint8), cv2.DIST_L2, 5,
@@ -122,14 +123,14 @@ def st_shapes(S, R, H, W, over_locks=None):
         near = lab[ys[idx-1], xs[idx-1]]
         lab = np.where(lab >= 0, lab, near)
     owns = []
-    for i, n in enumerate(LOCKS):
+    for i, n in enumerate(locks):
         own = (lab == i).astype(np.float32)
         own = np.maximum(cv2.GaussianBlur(own, (0, 0), .6), own)   # lock-to-lock seams: one soft pixel over the neighbour
         own = np.maximum(own, dilate(lab == i, 3) & (lab > i))     # and the lower lock runs on under the upper one
         owns.append(front_a*own)
-    for i, n in enumerate(LOCKS):
+    for i, n in enumerate(locks):
         upper = np.zeros((H, W), np.float32)
-        for j in range(i+1, len(LOCKS)):
+        for j in range(i+1, len(locks)):
             upper = np.maximum(upper, owns[j])
         if over_locks is not None:
             upper = np.maximum(upper, (over_locks > .5).astype(np.float32))
@@ -194,21 +195,50 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
     B = load(art/'A0-base.png', pad_top)
     H, W = B.shape[:2]
     S = {p.stem: st_layer(st, p.stem, (W, H-pad_top), pad_top) for p in st.glob('*.png')}
-    used = {s for v in ST_PARTS.values() for s in v} | set(FEATURES.values()) | set(LASHES.values()) \
-        | {'front hair', 'nose', 'mouth'}
-    if set(S)-used:
-        log(f'  没有用到的 See-through 图层：{"、".join(sorted(set(S)-used))}')
     layout = json.loads((base_layers/'layout.json').read_text())['layers']
     R = {}
     for l in layout:
         a = np.asarray(Image.open(base_layers/l['texture']).convert('RGBA')).astype(np.float32)
         R[l['name']] = (a[..., :3], a[..., 3]/255.)
     names = [l['name'] for l in layout]
-    top_lock = max(names.index(n) for n in LOCKS if n in names)
+    parts = dict(ST_PARTS)
+    # parts our split leaves in the face, as See-through draws them: the glasses
+    # over the eyes, the hair along the hairline when there are no bangs or side
+    # locks, and drop earrings, each swinging from the ear
+    extra = []
+    top = max(i for i, n in enumerate(names) if n.startswith(('Eye_', 'Iris_', 'Brow_', 'Nose', 'Mouth_', 'Cheek_'))
+              and not n.startswith('Eye_Open_Over'))
+    if 'eyewear' in S and (S['eyewear'][1] > .5).sum() >= 50:
+        extra.append((top+1, 'Glasses', S['eyewear']))
+    if not any(n in R for n in LOCKS) and 'front hair' in S:
+        # it lies over the face: under it, the forehead See-through paints on
+        # under the hair shows over the hairline as a hard shadow
+        extra.append((top+1, 'Hair_Front', S['front hair']))
+    if 'earwear' in S:
+        rgb, a = S['earwear']
+        pieces = sorted(components(a > .5, 30), key=lambda c: np.nonzero(c)[1].min())
+        tall = lambda c: np.ptp(np.nonzero(c)[0]) > 1.3*np.ptp(np.nonzero(c)[1])
+        if any(tall(c) for c in pieces):
+            parts['Face_Skin'] = [x for x in parts['Face_Skin'] if x != 'earwear']
+            for k, c in enumerate(pieces, 1):
+                m = np.clip(cv2.GaussianBlur(dilate(c, 3).astype(np.float32), (0, 0), 1.), 0, 1)
+                extra.append((names.index('Face_Skin')+1, f'Dangle_Ear_{k}', (rgb, (a*m).astype(np.float32))))
+    for at, n, _ in sorted(extra, key=lambda e: -e[0]):            # from the top: lower positions hold
+        layout.insert(at, dict(name=n, group='head', visible=True))
+        R[n] = (np.zeros((H, W, 3), np.float32), np.zeros((H, W), np.float32))
+        log(f'  {n}：See-through 的{dict(Glasses="眼镜", Hair_Front="前发").get(n, "耳饰")}，{int((dict((e[1], e[2]) for e in extra)[n][1] > .5).sum())} px')
+    names = [l['name'] for l in layout]
+    used = {s for v in parts.values() for s in v} | set(FEATURES.values()) | set(LASHES.values()) \
+        | {'front hair', 'nose', 'mouth'} | ({'eyewear'} if any(e[1] == 'Glasses' for e in extra) else set()) \
+        | ({'earwear'} if 'earwear' in S else set())
+    if set(S)-used:
+        log(f'  没有用到的 See-through 图层：{"、".join(sorted(set(S)-used))}')
     # the hat as both splits have it: See-through's alone runs on over the face
-    hat = [np.minimum(R[n][1], over([S[x] for x in ST_PARTS[n] if x in S])[1]) for n in names[top_lock+1:]
-           if n in ST_PARTS and any(x in S for x in ST_PARTS[n])]
-    shapes, fshapes = st_shapes(S, R, H, W, np.maximum.reduce(hat) if hat else None)
+    locks_at = [names.index(n) for n in LOCKS if n in names]
+    hat = [np.minimum(R[n][1], over([S[x] for x in parts[n] if x in S])[1]) for n in names[max(locks_at)+1:]
+           if n in parts and any(x in S for x in parts[n])] if locks_at else []
+    shapes, fshapes = st_shapes(S, R, H, W, np.maximum.reduce(hat) if hat else None, parts)
+    shapes.update({n: shape for _, n, shape in extra})
     # the closed mouth and the nose are ours, as drawn in the art: See-through
     # draws them thinner and lopsided, with a faint haze over the whole canvas
     # (so a mesh too coarse for the mouth form), and the other mouths are ours.
@@ -226,12 +256,12 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
     for i, n in enumerate(order[::-1]):
         if vis[n]:
             shown[R[n][1] > .5] = len(order)-1-i
-    under_locks = np.maximum.reduce([R[n][1] for n in LOCKS if n in R]) > .5
+    under_locks = np.maximum.reduce([R[n][1] for n in LOCKS if n in R] or [np.zeros((H, W), np.float32)]) > .5
     cover = np.zeros((H, W), np.float32); covers = {}; moved = []
     gcover = {}                                          # cover by each group's layers
     for n in order:
         covers[n] = cover.copy()
-        if n in ST_PARTS and n in R:
+        if n in parts and n in R and n in shapes:
             # a piece apart from what our split has of the part, hidden at rest
             # under the other half of the figure, is an item filed with the
             # wrong part (the beret's pompom with the blouse): left in, it
@@ -321,9 +351,9 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
         redrawn = cv2.morphologyEx(_u8(np.abs(v8-B).max(2) > 40), cv2.MORPH_OPEN, np.ones((7, 7), np.uint8)) > 0
         hairlike &= ~((shapes['Body'][1] > .5) & ~dilate(redrawn, 8))
         fill('Hair_Back', v8, hairlike, S['back hair'][0])
-    for n in LOCKS:                                     # a lock under another: our split's drawing
+    for n in [n for n in LOCKS if n in R]:              # a lock under another: our split's drawing
         fill(n, R[n][0], (covers[n] > .5) & (R[n][1] > .5), S['front hair'][0])
-    for n in [n for n in order if n.startswith('Dangle_')]:
+    for n in [n for n in order if n.startswith('Dangle_') and R[n][1].max() > .1]:
         # See-through draws the dangle on the clothes: under ours, the clothes
         # behind it from our split (V9), so it does not show twice when it swings
         g = 'Body' if group[n] == 'body' else 'Face_Skin'
@@ -338,6 +368,28 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
         if vis[n]:
             a = shapes[n][1] if n in shapes else R[n][1]
             rest = a[..., None]*(colour[n] if n in shapes else R[n][0])+(1-a[..., None])*rest
+    # a pocket of page shut in by hair (between a curl and a sleeve) that
+    # See-through paints over with hair: the page shows through there. Our
+    # split may hold it as page-white figure, and copied in it shows as a
+    # white patch on any other background
+    top_hair = np.zeros((H, W), bool)
+    for n in order[::-1]:
+        if vis[n] and n in shapes:
+            on = shapes[n][1] > .5
+            top_hair = np.where(on, n.startswith('Hair_'), top_hair)
+    paper = (B.min(2) > 240) & (np.ptp(B, 2) < 8)
+    # (filed with the hair by our split too: page white it files with the
+    # clothes is a white collar under a lock, and stays)
+    is_hair = np.array([n.startswith('Hair_') for n in order])
+    ours_hair = (shown >= 0) & is_hair[np.maximum(shown, 0)]
+    pocket = keep_large(paper & top_hair & ours_hair & (lum(rest) < lum(B)-60), 12)
+    if pocket.any():
+        cut = 1-np.clip(cv2.GaussianBlur(dilate(pocket, 1).astype(np.float32), (0, 0), .7), 0, 1)
+        for n in order:
+            if n in shapes:
+                shapes[n] = (shapes[n][0], (shapes[n][1]*cut).astype(np.float32))
+        rest = cut[..., None]*rest+(1-cut[..., None])*255.
+        log(f'  头发围住的白纸缝挖空：{int(pocket.sum())} px')
     off = (np.abs(rest-B).max(2) > MISS) & (figure_alpha(B) > .5)
     disk = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*MISS_WIDTH+1, 2*MISS_WIDTH+1))
     wrong = keep_large(cv2.morphologyEx(off.astype(np.uint8), cv2.MORPH_OPEN, disk) > 0, MISS_AREA)
@@ -371,6 +423,8 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
             # holes left inside the part, where ours has it and it shows at rest
             # (the page under them is a near colour, so they were not off enough)
             holes = fill_holes(np.maximum(a, m) > .5) & ~(np.maximum(a, m) > .5) & (R[n][1] > .5) & (shown == k)
+            if n.startswith('Hair_'):
+                holes &= ~paper                         # a gap between strands the art shows as page stays open
             m = np.maximum(m, holes.astype(np.float32))
             # where See-through has nothing, our colour outright (its colour there is no colour)
             mc = np.where(a < .1, (m > 0).astype(np.float32), m)
@@ -381,6 +435,47 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
                     shapes[u] = (shapes[u][0], (shapes[u][1]*(1-m)).astype(np.float32))
             log(f'  {n}：See-through 缺画或画错的 {int((wrong & (shown == k)).sum())} px'
                 +(f'、内部的洞 {int(holes.sum())} px' if holes.any() else '')+' 用自拆')
+
+    if 'Glasses' in shapes:
+        # the image model redraws the glasses a little off in every edit, so bits of
+        # the frame land in the features (an arc over the closed eye, the bridge on
+        # the nose) and on the skin; they would come apart from the glasses when
+        # the eyes close or the head turns. Under the glasses they go, and the
+        # skin there is filled from around (hidden at rest either way)
+        on = dilate(shapes['Glasses'][1] > .1, 2)
+        cut = 1-np.clip(cv2.GaussianBlur(on.astype(np.float32), (0, 0), 1.), 0, 1)
+        for n in order:
+            if n.startswith(('Eye_', 'Iris_', 'Brow_', 'Nose', 'Mouth_')):
+                if n in shapes:
+                    shapes[n] = (shapes[n][0], (shapes[n][1]*cut).astype(np.float32))
+                else:
+                    R[n] = (R[n][0], (R[n][1]*cut).astype(np.float32))
+        if 'Face_Skin' in shapes:
+            m = _u8(dilate(on, 1) & (shapes['Face_Skin'][1] > .5))
+            colour['Face_Skin'] = cv2.inpaint(np.clip(colour['Face_Skin'], 0, 255).astype(np.uint8), m, 5,
+                                              cv2.INPAINT_TELEA).astype(np.float32)
+        log(f'  Glasses：五官和脸皮上的镜框线去掉，{int(on.sum())} px')
+
+    if 'Hair_Back' in shapes and 'Body' in shapes:
+        # long hair shows beside the neck and outside the arms. Seen through a
+        # gap between an arm and the torso it reads as loose bits that change
+        # shape as it swings: it goes from there, and as far round it as a
+        # swing carries it (behind the arm and the torso, hidden either way)
+        body = shapes['Body'][1] > .5
+        neck = dilate(shapes['Neck'][1] > .5, 10) if 'Neck' in shapes else np.zeros((H, W), bool)
+        rows_on = np.nonzero(body.any(1))[0]
+        gap = np.zeros((H, W), bool)
+        for y in rows_on:
+            xs = np.nonzero(body[y])[0]
+            gap[y, xs[0]:xs[-1]+1] = ~body[y, xs[0]:xs[-1]+1]
+        low = (rows_on[0]+rows_on[-1])//2
+        gaps = [c for c in components(gap & (shapes['Hair_Back'][1] > .1), 80)
+                if not (c & neck).any() and np.nonzero(c)[0].min() > low]
+        if gaps:
+            off_hair = dilate(np.logical_or.reduce(gaps), 30)
+            cut = 1-np.clip(cv2.GaussianBlur(off_hair.astype(np.float32), (0, 0), 1.), 0, 1)
+            shapes['Hair_Back'] = (shapes['Hair_Back'][0], (shapes['Hair_Back'][1]*cut).astype(np.float32))
+            log(f'  Hair_Back：手臂和身体之间露出的长发去掉，{len(gaps)} 处')
 
     stack = Stack(B)
     for n in order:
