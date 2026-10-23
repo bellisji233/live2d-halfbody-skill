@@ -63,7 +63,29 @@ Tested on macOS. Not tested on Windows.
 2. Install dependencies: `pip install -r requirements.txt`
 3. Tell the agent "Make a VTube Studio avatar from this illustration" with the image path, or describe the character you want.
 
-From illustration to VTube Studio, one character takes 22–24 generated images, one See-through run, and a few minutes to build the model.
+One character takes 20–24 generated images and one See-through run; from illustration to VTube Studio is about an hour, see [FAQ](#faq).
+
+## FAQ
+
+### How long does one character take?
+
+Timings from the third character (glasses):
+
+| Step | Time | Who |
+|---|---|---|
+| 1. Generate the illustration (Codex) | about 1.5 min | Agent |
+| 2. Approve the illustration | — | You |
+| 3. Generate 15–19 variants: eyes closed, mouth open, hair removed, etc. (Codex, about 1.5 min each) | about 23–30 min | Agent |
+| 4. See-through layer separation (Hugging Face, runs alongside step 3) | about 5 min | Agent, asks you before uploading |
+| 5. Split layers and merge with the See-through result | about 2 min | Agent |
+| 6. Blush and three gestures: 4 more images | about 7 min | Agent |
+| 7. Estimate positions, check the art, build the model | about 1 min | Agent |
+| 8. Self-check, install into VTube Studio | 1–2 min | Agent |
+| 9. Check the avatar in VTube Studio | 5–10 min | You |
+
+Machine time adds up to about 35–45 minutes; with your approval and check, a character can be in VTube Studio within an hour if nothing goes wrong. The number of variants depends on whether the character has a hat, bangs, side hair and pendants.
+
+When the Codex or See-through quota runs out, the run stops at that step. Run it again once the quota resets; images already generated are not redone.
 
 ## Language
 
