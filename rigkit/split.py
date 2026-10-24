@@ -595,14 +595,6 @@ def crease_arc(m, min_span=.25):
     return arc & ~dilate(line, 1)
 
 
-def drop_crease(a, thr=.3):
-    """A closed eye is one lash line with short lashes under it; a crease
-    above it reads as a second eye line, so it is taken off."""
-    out = a.copy()
-    out[crease_arc(a > thr)] = 0
-    return out
-
-
 def hue_distance(rgb, region, sigma=6):
     """Per pixel, how far its hue (Lab a, b; lightness ignored, so dark
     outlines keep the hue of what they outline) is from the region's mean
@@ -843,10 +835,10 @@ def plan(art, out, pad_top=0, hat='Hat', log=print):
         for nm, src in (('Smile', 'D6-eyes-smile'), ('Closed', 'D5-eyes-closed')):
             if have(src):
                 # off the face outline, which an edit may redraw next to the lash
+                # the closed eye keeps its crease, as the smile eye does: it shows
+                # once the eye is all but shut (eyes.closed_swap)
                 rgb, a = matte(V(src), blank(src), zone & erode(face, 5))
                 a = tidy(a, hair=above)
-                if nm == 'Closed':
-                    a = drop_crease(a)
                 L.append((f'Eye_{nm}_{side}', rgb, a, False))
         if e['lower'].any():
             rgb, a = matte(Be, below, dilate(e['lower'], 2) & ~e['white'])

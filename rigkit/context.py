@@ -8,6 +8,8 @@ from __future__ import annotations
 import numpy as np
 import cv2
 
+from .split import crease_arc
+
 
 def smooth(t):
     t = np.clip(t, 0, 1)
@@ -65,7 +67,8 @@ class Context:
                     cv2.imread(str(c.art_path(closed_cfg['image'])))[r0:r1, :, 2] < ink_below
             else:
                 art = cv2.imread(str(c.part('Eye_Closed_'+side)), -1)
-                ink = (art[:, :, 3] > 128) & (art[:, :, 2] < ink_below)
+                # the crease above the lash is not the closed line
+                ink = (art[:, :, 3] > 128) & (art[:, :, 2] < ink_below) & ~crease_arc(art[:, :, 3] > 76)
             # the closed lash only: a speck the edit left near it (below the
             # corner) would pull the closed line down there, and the lash with it
             n, lab, st, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8))
