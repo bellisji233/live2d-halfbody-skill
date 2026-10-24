@@ -49,7 +49,7 @@ Agent 会把你给的立绘或描述重画成方便拆图层的版本，你确�
 
 - 一个能运行 skill 的 AI Agent，如 Claude Code
 - Python 3.10+，ffmpeg
-- ChatGPT 账号：用 Codex 命令行出图（ChatGPT 桌面版自带）
+- ChatGPT 账号：用 Codex 命令行出图（ChatGPT 桌面版自带）。也可以换成其他能改图的图像工具（还没用它完整做过一个角色）
 - See-through 用的账号，至少一个：
   - Hugging Face 免费账号（首选，几分钟一次）：建一个 Read token，放进环境变量 `HF_TOKEN` 或 `~/.cache/huggingface/token`。不登录时每天的免费额度不一定够跑一次，登录后约每天 1～2 次
   - 魔搭 ModelScope 账号（备用，免费，要排队，一次可能半小时，分辨率更高）：建一个访问令牌，放进环境变量 `MODELSCOPE_API_TOKEN` 或 `~/.cache/modelscope/token`

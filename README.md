@@ -51,7 +51,7 @@ For hairstyles or accessories outside this list (animal ears, braids), ask the a
 
 - An AI agent that runs skills, such as Claude Code
 - Python 3.10+, ffmpeg
-- A ChatGPT account: images are generated with the Codex CLI (bundled with the ChatGPT desktop app)
+- A ChatGPT account: images are generated with the Codex CLI (bundled with the ChatGPT desktop app). Another image tool that can edit images can be used instead (not yet tested on a full character)
 - An account for See-through, at least one of:
   - Hugging Face, free (preferred, a few minutes per run): create a Read token and put it in the `HF_TOKEN` environment variable or `~/.cache/huggingface/token`. Without logging in, the daily free quota may not cover one run; logged in, about 1–2 runs a day
   - ModelScope, free (backup; queued, a run can take half an hour; higher resolution): create an access token and put it in `MODELSCOPE_API_TOKEN` or `~/.cache/modelscope/token`

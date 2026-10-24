@@ -5,7 +5,8 @@ for, never read out.
 
   python -m rigkit.doctor
 
-✗ blocks a step (fix it first), ! only limits one (no token, no ffmpeg).
+✗ blocks a step (fix it first), ! only limits one (no token, no ffmpeg;
+no Codex: the images come from another image tool).
 Exits 1 when anything is ✗.
 """
 from __future__ import annotations
@@ -27,15 +28,16 @@ def checks():
         return
 
     from .variants import CODEX
+    other = '；用其他图像工具出图时不需要'
     if not (os.path.isfile(CODEX) and os.access(CODEX, os.X_OK)):
-        yield False, True, 'Codex 命令行', '找不到：装 ChatGPT 桌面版或单独装 codex，不在 PATH 里时把环境变量 CODEX 指向它'
+        yield False, False, 'Codex 命令行', '找不到：装 ChatGPT 桌面版或单独装 codex，不在 PATH 里时把环境变量 CODEX 指向它'+other
     else:
         try:
             r = subprocess.run([CODEX, 'login', 'status'], capture_output=True, text=True, timeout=30)
             logged = r.returncode == 0
         except (OSError, subprocess.TimeoutExpired):
             logged = False
-        yield logged, True, 'Codex 命令行', CODEX if logged else f'{CODEX} 未登录：运行 codex login，用 ChatGPT 账号登录'
+        yield logged, False, 'Codex 命令行', CODEX if logged else f'{CODEX} 未登录：运行 codex login，用 ChatGPT 账号登录'+other
 
     hf = bool(os.environ.get('HF_TOKEN')) or Path('~/.cache/huggingface/token').expanduser().exists()
     ms = bool(os.environ.get('MODELSCOPE_API_TOKEN')) or Path('~/.cache/modelscope/token').expanduser().exists()

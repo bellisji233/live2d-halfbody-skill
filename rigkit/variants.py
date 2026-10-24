@@ -3,6 +3,11 @@ check each one: how far it drifted from its base, and where it changed.
 
   python -m rigkit.variants ART_DIR [NAME ...]
   python -m rigkit.variants ART_DIR A0-base     # the illustration itself
+  python -m rigkit.variants ART_DIR --list [NAME ...]
+
+--list prints, for each image, the one to attach and the prompt file,
+for making them with an image tool other than Codex: a variant already
+in ART_DIR is only checked, never made again.
 
 ART_DIR holds A0-base.png and prompts/<NAME>.txt. A0-base is generated
 new, with 参考.* in ART_DIR attached as a reference when there is one;
@@ -37,6 +42,8 @@ def reference(art: Path):
 
 
 def generate(art: Path, name: str, base: str):
+    if not (os.path.isfile(CODEX) and os.access(CODEX, os.X_OK)):
+        raise RuntimeError('找不到 Codex 命令行。用其他图像工具时，按 --list 逐张出图存好，再跑一次只做检查')
     out = art/f'{name}.png'
     prompt = (art/'prompts'/f'{name}.txt').read_text()
     if name == BASE:
@@ -91,9 +98,34 @@ def check(art: Path, name: str, base: str):
                 changed=round(changed, 4), phase_response=round(resp, 3))
 
 
+def show(art: Path, names):
+    """What to make with another image tool: the image to attach, the prompt."""
+    present = lambda n: (art/'prompts'/f'{n}.txt').exists()
+    for name in names:
+        if not present(name):
+            continue                                    # left out for this character
+        if name == BASE:
+            ref = reference(art)
+            src = f'参考图 {ref.name}' if ref else '不附图'
+        else:
+            base = base_of(name, present)
+            src = f'底图 {base}.png' + ('' if (art/f'{base}.png').exists() else '（还没有）')
+        if (art/f'{name}.png').exists():
+            state = '已有'
+        elif '[[' in (art/'prompts'/f'{name}.txt').read_text():
+            state = '提示词里还有待填的 [[…]]'
+        else:
+            state = '缺'
+        print(f'{name}.png  {src}  提示词 prompts/{name}.txt  {state}')
+
+
 def main():
-    art = Path(sys.argv[1]).resolve()
-    names = sys.argv[2:] or ORDER
+    args = [a for a in sys.argv[1:] if a != '--list']
+    art = Path(args[0]).resolve()
+    if '--list' in sys.argv:
+        show(art, args[1:] or [BASE]+ORDER)
+        return
+    names = args[1:] or ORDER
     report_path = art/'check'/'report.json'
     report = json.loads(report_path.read_text()) if report_path.exists() else {}
     for name in names:

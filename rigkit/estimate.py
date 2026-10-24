@@ -192,9 +192,10 @@ def estimate(art: Path, name: str):
         'neck': {'layer': 'Neck', 'chin_v': chin_v, 'chin_v_clear': 5, 'tilt_band': [round(float(chin+.12*fh)), round(47*sh)],
                  'hair_hold': [2, round(45*sw)], 'hair_face_clear': [10, 15],
                  'behind_jaw_from': [round(float(chin-.15*fh)), round(50*sh)]},
-        # half shut: the crease fades out and the lower lid waits until halfway (second character, accepted)
+        # half shut: the crease fades out and the lower lid waits until halfway (second character, accepted);
+        # all but shut, the drawn closed eye takes over from the pressed lash (twin tails, accepted)
         'eyes': {'half_width': eye_half, 'closed_art': {'ink_below': 150}, 'iris_travel': [round(4*sw, 1), round(2.5*sh, 1)],
-                 'crease_fade': [.4, .85], 'lower_from': .45},
+                 'crease_fade': [.4, .85], 'lower_from': .45, 'closed_swap': [.12, .15]},
         'brows': {'tail_x': {}, 'length': 82},
         'mouth': {
             'open_layer': 'Mouth_Open', 'curve': {'centre': round(float((mo[0]+mo[2])/2)), 'half': round(float((mo[2]-mo[0])/2))},
