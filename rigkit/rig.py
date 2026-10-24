@@ -61,8 +61,11 @@ class Rig:
     def _params(self):
         c = self.char
         P = [(a, [-30., 0., 30.], 0.) for a in HEAD]
+        # with the drawn closed eye, keys at both ends of the swap: it is all but
+        # instant, so no half-faded double lash shows while the eye is narrowed
+        eye_keys = sorted(set(EYE_OPEN_KEYS)|{float(k) for k in c['eyes'].get('closed_swap', [])})
         P += [('ParamBodyAngleZ', [-10., 0., 10.], 0.), ('ParamBreath', [0., 1.], 0.),
-              ('ParamEyeLOpen', EYE_OPEN_KEYS, 1.), ('ParamEyeROpen', EYE_OPEN_KEYS, 1.),
+              ('ParamEyeLOpen', eye_keys, 1.), ('ParamEyeROpen', eye_keys, 1.),
               ('ParamEyeSmile', [0., 1.], 0.), ('ParamEyeBallX', SIGNED, 0.), ('ParamEyeBallY', SIGNED, 0.),
               ('ParamBrowForm', SIGNED, 0.), ('ParamMouthOpenY', mouth_open_keys(c['mouth'].get('open_from', 0.)), 0.),
               ('ParamMouthVariant', sorted({0.}|{float(k) for k in c['mouth']['variants']}), 0.)]
@@ -189,6 +192,11 @@ class Rig:
         opening = p.get('ParamEye'+side+'Open', 1.)
         smile = p.get('ParamEyeSmile', 0.)
         x = v[:, 0]
+        # eyes.closed_swap [lo, hi]: closing past hi, the drawn closed eye fades in
+        # over the lash pressed down to it; below lo it shows alone (a lash
+        # pressed flat frays: its strokes and pale fringe squeeze into jags)
+        lo_hi = self.char['eyes'].get('closed_swap')
+        keep = float(np.clip((opening-lo_hi[0])/(lo_hi[1]-lo_hi[0]), 0, 1)) if lo_hi else 1.
         if L.role == 'eye_lash':
             # the painted lash travels down to the closed line, keeping its ink
             xc, top, bot = ctx.lash_bands[side]
@@ -197,7 +205,7 @@ class Rig:
             scale = np.minimum(1, 8/np.maximum(6, sb-st))
             target = closed+(v[:, 1]-sb)*scale
             v[:, 1] = v[:, 1]*opening+target*(1-opening)
-            return v, 1-smile
+            return v, (1-smile)*keep
         e = self.char['eyes']
         # the lower lid rises only once the eye is this far closed (1: all the way)
         low = min(1., opening/e.get('lower_from', 1.))
@@ -208,7 +216,7 @@ class Rig:
             v[:, 1] = self._eyelid_warp(v[:, 1], upper, lower, nu, nl, side)
             return v, 0.
         if L.role == 'eye_white':
-            return v, np.clip(opening/.08, 0, 1)*(1-smile)
+            return v, np.clip(opening/.08, 0, 1)*(1-smile)*keep        # gone once the drawn closed eye shows
         if L.role == 'eye_lower':
             upper, lower, closed = ctx.eye_contours(x, side)
             v[:, 1] += (closed-lower)*(1-low)
@@ -225,13 +233,13 @@ class Rig:
             tx, ty = self.char['eyes']['iris_travel']
             v[:, 0] += tx*p.get('ParamEyeBallX', 0)
             v[:, 1] += ty*p.get('ParamEyeBallY', 0)
-            return v, np.clip(opening/.08, 0, 1)*(1-smile)
+            return v, np.clip(opening/.08, 0, 1)*(1-smile)*keep
         if L.role == 'eye_closed':
             xc, top, bot = ctx.lash_bands[side]
             sb = np.interp(x, xc, bot)
             _, _, closed = ctx.eye_contours(x, side)
             v[:, 1] += (sb-closed)*opening
-            return v, 0.
+            return v, (1-smile)*(1-keep) if lo_hi else 0.
         if L.role == 'eye_smile':
             return v, smile
         raise ValueError(L.role)

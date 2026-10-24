@@ -139,6 +139,19 @@ def estimate(art: Path, name: str):
         locks['Hair_Back'] = dict(param='ParamHairBack', swing=round(22*sw, 1), pitch=round(8*sh, 1),
                                   root=[y0, round(float(b[3]-y0))], tip='ParamHairBack2', seam=False,
                                   physics={'length': 11.})
+    for nm in ('Hair_Tail_L', 'Hair_Tail_R'):
+        b = B(nm, 0)
+        if b is None:
+            continue
+        # a twin tail swings from its hair tie, freer further down
+        y0 = round(float(b[1]+.12*(b[3]-b[1])))
+        param = 'ParamHair'+nm[5:].replace('_', '')
+        locks[nm] = dict(param=param, swing=round(30*sw, 1), pitch=round(10*sh, 1), root=[y0, round(float(b[3]-y0))],
+                         tip=param+'2', seam=False, physics={'length': 11.})
+    if 'Hair_Tail_L' in locks and 'Hair_Back' in locks:
+        # the tails swing; what hangs at the nape stays close to the head
+        locks['Hair_Back']['swing'] = round(locks['Hair_Back']['swing']*.3, 1)
+        locks['Hair_Back'].pop('tip', None)            # its tip segment swings as far as any lock's
     head_layers = [n for n in names if n.startswith(('Hair_', 'Face_', 'Ear_'))]
     hb = [B(n, 0) for n in head_layers if B(n, 0) is not None]
     # whatever else turns with the head (a hat above the hair) needs the lattice
@@ -268,7 +281,8 @@ def draw(art: Path, cfg, out: Path):
     bx, by = b['pivot']
     d.line([bx-14, by, bx+14, by], fill=green, width=3); d.line([bx, by-14, bx, by+14], fill=green, width=3)
     d.text((bx+16, by-10), '身体倾斜转轴', fill=green, font=font)
-    hair_names = {'Hair_Side_L': '左侧发', 'Hair_Side_R': '右侧发', 'Hair_Bang': '刘海', 'Hair_Bun': '发髻', 'Hair_Back': '后发'}
+    hair_names = {'Hair_Side_L': '左侧发', 'Hair_Side_R': '右侧发', 'Hair_Bang': '刘海', 'Hair_Bun': '发髻', 'Hair_Back': '后发',
+                  'Hair_Tail_L': '左马尾', 'Hair_Tail_R': '右马尾'}
     roots = {}
     for nm, lock in cfg['hair']['locks'].items():
         roots.setdefault(lock['root'][0], []).append(hair_names.get(nm, nm))

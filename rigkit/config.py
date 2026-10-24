@@ -104,7 +104,7 @@ def infer_role(name, locks):
     if name.startswith('Dangle_'):
         return dict(role='dangle')
     if name in locks:
-        if name.startswith('Hair_Back'):
+        if name.startswith(('Hair_Back', 'Hair_Tail_')):
             # behind the head: swings with its own lock, never held by the neck
             return dict(role='hair', lock=name, side=side, neck_hold='none')
         return dict(role='hair', lock=name, side=side)

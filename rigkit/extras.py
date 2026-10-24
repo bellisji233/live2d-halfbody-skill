@@ -25,7 +25,7 @@ import numpy as np
 import cv2
 from PIL import Image, ImageDraw, ImageFont
 
-from .split import WHITE, load, align, match_colours, figure_alpha, dilate, erode, keep_large, fill_holes, nearest_fill
+from .split import WHITE, load, align, match_colours, figure_alpha, dilate, erode, keep_large, fill_holes, nearest_fill, components
 
 REST = 'R0-rest'
 POSES = {'P1-wave': 'Pose_Wave', 'P2-explain': 'Pose_Explain', 'P3-point': 'Pose_Point'}
@@ -77,14 +77,32 @@ def edit(path, rest, pad_top):
     return v, float(np.hypot(*shift))
 
 
-def pose_layer(v, rest, figure, body, allowed, reach=None):
+def pose_layer(v, rest, figure, body, allowed, reach=None, hair_holes=None):
     """The body where the edit did not change it, the edit where it did: a
     colour change, or the figure moving over the page (a pale palm is close
     to the page's white). reach: where else the arm may go (over long hair
     behind the body); a change there counts only where it carries on from
     the change inside allowed."""
-    fa = figure_alpha(v)
     d = cv2.GaussianBlur(np.abs(v-rest).max(2), (0, 0), 3)        # line jitter averages out, a redrawn arm does not
+    # page white the fill cannot reach (closed in by a raised arm and the
+    # hair) is still page where it was page at rest and the edit did not draw
+    # over it (a white sleeve's flat inside is within what it redrew)
+    paper = (v.min(2) > 246) & (np.ptp(v, 2) < 6)
+    drawn = fill_holes(keep_large(d > 25, 3000), 20000)
+    page = paper & (figure < .5) & ~drawn
+    if hair_holes is not None:
+        # the curls of the hair behind the body, uncovered as an arm moves off them
+        # where an arm moved off: small gaps of page white the edit left between
+        # strands of hair (a third or more of what is round them dark hair; a white cuff has its
+        # sleeve round it, kept)
+        holes, behind = hair_holes
+        page |= paper & holes
+        dark = v.mean(2) < 120
+        for c in components(paper & (body[1] > .5), 1):
+            ring = dilate(c, 3) & ~c
+            if c.sum() < 800 and dark[ring].mean() > .3:
+                page |= c
+    fa = figure_alpha(v, fixed=True, page=page)   # fixed: a pale garment is not page
     moved = cv2.GaussianBlur(np.abs(fa-figure), (0, 0), 3)
     raw = (d > 25) | (moved > .5)
     changed = fill_holes(keep_large(raw & allowed, 3000), 20000) & allowed
@@ -178,16 +196,18 @@ def run(art, folder, log=print):
     body_flat = flat(body, L)
     allowed = (above < .5) & ((body_flat[1] > .5) | (below < .5))      # at rest the body or the page shows here
     reach = None
-    if 'Hair_Back' in L and 'Neck' in L:
+    hanging = [n for n in L if n.startswith(('Hair_Back', 'Hair_Tail_'))]
+    if hanging and 'Neck' in L:
         rows = lambda n: np.nonzero((L[n][1] > .5).any(1))[0]
-        if rows('Hair_Back').max() > rows('Neck').max():
+        if max(rows(n).max() for n in hanging) > rows('Neck').max():
             reach = above < .5                                          # long hair: a raised arm goes over it
+    hair_holes = (fill_holes(below > .5, 20000) & (below < .1), below > .5)   # page closed in by, and hair behind the body
     made, checks = [], []
     for edit_name, layer in POSES.items():
         if not (art/f'{edit_name}.png').exists():
             continue
         v, drift = edit(art/f'{edit_name}.png', rest, pad_top)
-        rgb, a, changed = pose_layer(v, rest, figure, body_flat, allowed, reach)
+        rgb, a, changed = pose_layer(v, rest, figure, body_flat, allowed, reach, hair_holes)
         save(folder, doc, layer, 'pose', rgb, a, after=body+[p for p in POSES.values()])
         L[layer] = (rgb, a)
         model, _ = over(base[:first]+[layer]+base[last+1:], L)

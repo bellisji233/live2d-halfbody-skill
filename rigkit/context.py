@@ -66,6 +66,12 @@ class Context:
             else:
                 art = cv2.imread(str(c.part('Eye_Closed_'+side)), -1)
                 ink = (art[:, :, 3] > 128) & (art[:, :, 2] < ink_below)
+            # the closed lash only: a speck the edit left near it (below the
+            # corner) would pull the closed line down there, and the lash with it
+            n, lab, st, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8))
+            if n > 2:
+                big = st[1:, cv2.CC_STAT_AREA].max()
+                ink = np.isin(lab, [i for i in range(1, n) if st[i, cv2.CC_STAT_AREA] >= .3*big])
             closed, cx = [], []
             for x in cols:
                 yy = np.where(ink[:, x])[0]

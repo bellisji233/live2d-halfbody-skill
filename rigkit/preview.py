@@ -72,8 +72,8 @@ def sheet(char, out, labelled):
     head, zones = boxes(char)
     font, small = _font(22), _font(16)
     dangles = [d['param'] for d in char.get('dangles', {}).values()]
-    # long hair and dangles move below the head: the whole canvas in every pose
-    below = bool(dangles) or any(lk.get('body_from') for lk in char['hair']['locks'].values())
+    # long hair, twin tails and dangles move below the head: the whole canvas in every pose
+    below = bool(dangles) or any(lk.get('body_from') or n.startswith('Hair_Tail_') for n, lk in char['hair']['locks'].items())
     for label, p in POSES:
         if label in ('甩发', '反向甩发'):
             p = {**p, **{d: -1. if label == '甩发' else 1. for d in dangles}}

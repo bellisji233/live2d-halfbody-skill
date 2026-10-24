@@ -39,7 +39,7 @@ import cv2
 from PIL import Image
 
 from .split import (Stack, load, components, _u8, dilate, erode, keep_large, fill_holes, hue_distance, rest_image, sheet,
-                    figure_alpha, lum)
+                    figure_alpha, lum, align, twin_tails, PALETTE)
 
 ST_PARTS = {                      # our layer -> See-through layers, bottom first
     'Hair_Back': ['back hair'],
@@ -181,6 +181,11 @@ def st_shapes(S, R, H, W, over_locks=None, parts=ST_PARTS):
             own = (owner == i+1).astype(np.float32)
             own = np.maximum(cv2.GaussianBlur(own, (0, 0), .6), own)
             fshapes[p] = (rgb, (a*own).astype(np.float32))
+        # the lash stays as See-through draws it, a double-eyelid line drawn
+        # close over it included: cut out of it by how pale each pixel is (to the
+        # crease, or away where the art has bare skin), every cut showed, as a
+        # jagged upper edge, a pale seam or a band cut off. Before it would lie
+        # over the closed eye, the drawn closed eye takes over (eyes.closed_swap)
     return shapes, fshapes
 
 
@@ -209,7 +214,10 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
     top = max(i for i, n in enumerate(names) if n.startswith(('Eye_', 'Iris_', 'Brow_', 'Nose', 'Mouth_', 'Cheek_'))
               and not n.startswith('Eye_Open_Over'))
     if 'eyewear' in S and (S['eyewear'][1] > .5).sum() >= 50:
-        extra.append((top+1, 'Glasses', S['eyewear']))
+        # the frame only: a faint glare painted in a lens sits over the eye at
+        # rest and shows as a grey smudge on the skin once the eye closes
+        rgb, a = S['eyewear']
+        extra.append((top+1, 'Glasses', (rgb, (a*dilate(a > .6, 2)).astype(np.float32))))
     if not any(n in R for n in LOCKS) and 'front hair' in S:
         # it lies over the face: under it, the forehead See-through paints on
         # under the hair shows over the hairline as a hard shadow
@@ -456,6 +464,7 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
                                               cv2.INPAINT_TELEA).astype(np.float32)
         log(f'  Glasses：五官和脸皮上的镜框线去掉，{int(on.sum())} px')
 
+    cut_out = np.zeros((H, W), bool)                    # taken out on purpose: not a gap to fill
     if 'Hair_Back' in shapes and 'Body' in shapes:
         # long hair shows beside the neck and outside the arms. Seen through a
         # gap between an arm and the torso it reads as loose bits that change
@@ -473,9 +482,86 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
                 if not (c & neck).any() and np.nonzero(c)[0].min() > low]
         if gaps:
             off_hair = dilate(np.logical_or.reduce(gaps), 30)
+            cut_out |= off_hair
             cut = 1-np.clip(cv2.GaussianBlur(off_hair.astype(np.float32), (0, 0), 1.), 0, 1)
             shapes['Hair_Back'] = (shapes['Hair_Back'][0], (shapes['Hair_Back'][1]*cut).astype(np.float32))
             log(f'  Hair_Back：手臂和身体之间露出的长发去掉，{len(gaps)} 处')
+
+    # a narrow gap See-through leaves between its parts (the hair between a hair
+    # tie and a headband): the background shows through it at rest. The art goes
+    # in, on the lowest layer our split has there, so what lies above covers it
+    # as before. Only what is too narrow for the check above (a wide one is
+    # taken from our split there), and not next to the page (or white clothes):
+    # a gap between strands the art shows as page stays open
+    a_rest = np.zeros((H, W), np.float32)
+    for n in order[::-1]:
+        if vis[n]:
+            a = shapes[n][1] if n in shapes else R[n][1]
+            a_rest = a+(1-a)*a_rest
+    gap = (a_rest < .5) & (figure_alpha(B) > .5) & ~dilate(paper, 2) & ~cut_out
+    gap[:2] = gap[-2:] = False; gap[:, :2] = gap[:, -2:] = False     # the canvas border, cut on purpose
+    thin = gap
+    gap = cv2.morphologyEx(_u8(gap), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)) > 0   # not a sliver along an outline
+    wide = cv2.morphologyEx(_u8(gap), cv2.MORPH_OPEN, disk) > 0
+    filled = []
+    for c in components(gap, 12):
+        if (c & wide).any():
+            continue
+        for _ in range(40):                              # with the thin ends it runs into
+            grown = dilate(c, 1) & thin
+            if grown.sum() == c.sum():
+                break
+            c = grown
+        under = [n for n in order if n in shapes and vis[n] and (R[n][1][c] > .5).mean() > .5]
+        if under:
+            n = under[-1]
+            # and the half-covered pixels round it, or a pale line stays along its edge
+            m = np.clip(cv2.GaussianBlur((c | (dilate(c, 2) & (a_rest < .9))).astype(np.float32), (0, 0), .5), 0, 1)
+            colour[n] = m[..., None]*B+(1-m[..., None])*colour[n]
+            shapes[n] = (shapes[n][0], np.maximum(shapes[n][1], m).astype(np.float32))
+            filled.append(f'{n} {int(c.sum())} px')
+    if filled:
+        log(f'  静止时露底的窄缝用原画补上：{"、".join(filled)}')
+
+    s1 = art/'S1-segment.png'
+    s1 = align(load(s1, pad_top), B)[0] if s1.exists() and 'Hair_Back' in shapes else None
+    tails = twin_tails(s1) if s1 is not None else []
+    if tails:
+        # twin tails swing from their hair ties, each on its own. See-through has
+        # them in one layer with the top of the head: each pixel of it goes to
+        # the nearest of the two tails or the rest of the hair as S1 paints them,
+        # hidden pixels too, behind the face always to the head
+        rgb, a = shapes['Hair_Back']
+        head = np.abs(s1-np.float32(PALETTE['hair'])).max(2) < 60
+        if 'Face_Skin' in shapes:
+            head |= shapes['Face_Skin'][1] > .5
+        owner = np.stack([cv2.distanceTransform(_u8(~m), cv2.DIST_L2, 5) for m in (head, *tails)]).argmin(0)
+        # a loose strand across the line between them goes whole to the part it
+        # hangs from (the solid hair at its upper end), or it comes apart in a swing
+        solid = cv2.morphologyEx(_u8(a > .5), cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))) > 0
+        rows_ = np.arange(H)[:, None]
+        for c in components((a > .5) & ~solid, 20):
+            ys = np.nonzero(c)[0]
+            top = c & (rows_ <= ys.min()+max(3, .15*np.ptp(ys)))
+            root = dilate(top, 3) & solid
+            ks, counts = np.unique(owner[root if root.any() else top], return_counts=True)
+            owner[dilate(c, 2) & ~solid] = ks[counts.argmax()]
+        at = order.index('Hair_Back')
+        for k, n in ((1, 'Hair_Tail_L'), (2, 'Hair_Tail_R')):
+            mine = owner == k
+            body = max(components((a > .02) & mine, 1), key=lambda c: c.sum())
+            mine &= dilate(body, 3)                    # specks of haze far off (a canvas corner) go
+            shapes[n] = (rgb, (a*mine).astype(np.float32))
+            colour[n] = colour['Hair_Back']
+            group[n], vis[n] = group['Hair_Back'], True
+        order[at:at] = ['Hair_Tail_L', 'Hair_Tail_R']                 # over the head's back hair
+        # the head's back hair runs on 12 px under the tails, where the hair is
+        # whole (not along their outline): a tail swinging off it shows hair
+        under = (cv2.distanceTransform(_u8(owner != 0), cv2.DIST_L2, 5) < 12) & erode(a > .5, 3)
+        under = np.clip(cv2.GaussianBlur(under.astype(np.float32), (0, 0), 1.5), 0, 1)
+        shapes['Hair_Back'] = (rgb, (a*np.maximum(owner == 0, under)).astype(np.float32))
+        log(f"  Hair_Tail_L/R：双马尾从后发里分出来，{int((shapes['Hair_Tail_L'][1] > .5).sum())} / "
+            f"{int((shapes['Hair_Tail_R'][1] > .5).sum())} px")
 
     stack = Stack(B)
     for n in order:

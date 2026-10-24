@@ -29,10 +29,10 @@ from PIL import Image
 WHITE = 255.
 BASE = 'A0-base'
 PALETTE = {'hat': (255, 0, 0), 'bang': (0, 0, 255), 'side': (0, 255, 0), 'hair': (255, 255, 0),
-           'face': (255, 0, 255), 'neck': (0, 255, 255), 'body': (255, 128, 0)}
-# label map regions, top of the drawing order first
+           'face': (255, 0, 255), 'neck': (0, 255, 255), 'body': (255, 128, 0), 'tail': (128, 0, 255)}
+# label map regions, top of the drawing order first; tails only on S1 maps that have them
 LABEL_MAPS = ('S1-segment', 'V4-skin-mask')
-LABEL_ORDER = ['hat', 'bang', 'side', 'face', 'body', 'neck', 'hair']
+LABEL_ORDER = ['hat', 'bang', 'side', 'face', 'body', 'neck', 'tail', 'hair']
 # which image each variant edits; anything not listed edits the base
 BASES = {'V2-side-off': 'V1-hat-off', 'V3-bangs-off': 'V2-side-off', 'V4-skin-mask': 'V3-bangs-off',
          'V5-blank-face': 'V3-bangs-off', 'D7-brows-angry': 'V3-bangs-off', 'D8-brows-troubled': 'V3-bangs-off',
@@ -72,13 +72,17 @@ def load(path, pad_top=0, size=None):
     return rgb
 
 
-def figure_alpha(rgb, tol=8, keep=None):
+def figure_alpha(rgb, tol=8, keep=None, fixed=False, page=None):
     """Character vs the flat white background: flood fill from every white
     border pixel, plus pockets of flat paper white near the edge (gaps
     between loose strands, between an arm and the body) that antialiasing
     cuts off from the page. Edge pixels are matted against white. keep:
     pixels known to be the character (from the label map); white areas
-    there (a pom-pom, a collar) stay opaque even where they touch the page."""
+    there (a pom-pom, a collar) stay opaque even where they touch the page.
+    fixed: every filled pixel within tol of the white it started from, not
+    of its neighbour, so the fill does not creep into a pale garment along
+    a faint outline (no label map to hold it). page: pixels known to be the
+    page though the fill cannot reach them (white closed in by the figure)."""
     h, w = rgb.shape[:2]
     work = np.clip(rgb, 0, 255).astype(np.uint8).copy()
     mask = np.zeros((h+2, w+2), np.uint8)
@@ -86,7 +90,7 @@ def figure_alpha(rgb, tol=8, keep=None):
     for x, y in border:
         if mask[y+1, x+1] == 0 and work[y, x].min() > 240:
             cv2.floodFill(work, mask, (x, y), (0, 0, 0), loDiff=(tol,)*3, upDiff=(tol,)*3,
-                          flags=4 | cv2.FLOODFILL_MASK_ONLY | (255 << 8))
+                          flags=4 | cv2.FLOODFILL_MASK_ONLY | (255 << 8) | (cv2.FLOODFILL_FIXED_RANGE if fixed else 0))
     outside = mask[1:-1, 1:-1] > 0
     paper = (rgb.min(2) > 246) & (rgb.max(2)-rgb.min(2) < 6) & ~outside
     reach = cv2.dilate(outside.astype(np.uint8), np.ones((31, 31), np.uint8)) > 0
@@ -101,6 +105,8 @@ def figure_alpha(rgb, tol=8, keep=None):
         light = (ink.max(2) <= 70).astype(np.uint8)
         thick = cv2.distanceTransform(light, cv2.DIST_L2, 5) > 3.5
         outside &= ~(keep & (cv2.dilate(thick.astype(np.uint8), disk(4)) > 0) & (light > 0))
+    if page is not None:
+        outside |= page
     alpha = np.where(outside, 0., 1.)
     # within reach of the page, a pixel is its nearest solid colour blended
     # with white: with = a*F + (1-a)*white (thin gaps between strands too)
@@ -207,6 +213,13 @@ def fill_holes(mask, max_area=None):
 def components(mask, min_area):
     n, lab, st, _ = cv2.connectedComponentsWithStats(_u8(mask))
     return [lab == i for i in range(1, n) if st[i, cv2.CC_STAT_AREA] >= min_area]
+
+
+def twin_tails(s1, min_area=2000):
+    """The two tails S1 paints violet, left first; [] when it has none."""
+    m = np.abs(s1-np.float32(PALETTE['tail'])).max(2) < 60
+    tails = sorted(components(m, min_area), key=lambda c: np.nonzero(c)[1].mean())
+    return tails if len(tails) == 2 else []
 
 
 def keep_large(mask, min_area):
@@ -434,6 +447,25 @@ def find_features(v3, v5, face, log):
         if brow:
             m = np.logical_or.reduce([b['mask'] for b in brow])
             feats['brow_'+side] = dict(mask=m, box=_box(m), c=_centroid(m), area=sum(b['area'] for b in brow))
+    for side, other in (('L', 'R'), ('R', 'L')):
+        if 'brow_'+side in feats or 'brow_'+other not in feats:
+            continue
+        # a brow close over its eye joins it into one blob: cut it off along the
+        # empty row between them nearest the other brow's lower edge
+        eye, ob = feats['eye_'+side], feats['brow_'+other]
+        ink = (eye['mask'] & core).any(1)
+        gaps = [y for y in range(int(np.nonzero(ink)[0][0]), int(eye['c'][1])) if not ink[y]]
+        if not gaps:
+            continue
+        cut = min(gaps, key=lambda y: abs(y-ob['box'][3]))
+        above = (np.arange(len(ink)) <= cut)[:, None]
+        part = eye['mask'] & above & core
+        pb, (ow, oh) = _box(part), ob['box'][2:]-ob['box'][:2]
+        if abs(_centroid(part)[1]-ob['c'][1]) > max(8, oh) or pb[2]-pb[0] < .5*ow:
+            continue                                     # not a brow (a crease line over the eye)
+        for key, m in (('brow_'+side, eye['mask'] & above), ('eye_'+side, eye['mask'] & ~above)):
+            feats[key] = dict(mask=m, box=_box(m), c=_centroid(m & core), area=int((m & core).sum()))
+        log(f'  {"左" if side == "L" else "右"}眉和眼连成一块，在 y={cut} 处分开')
     used = [f['mask'] for f in feats.values()]
     eye_y = (feats['eye_L']['c'][1]+feats['eye_R']['c'][1])/2
     rest = [b for b in blobs if not any((b['mask'] & u).any() for u in used)
@@ -705,14 +737,18 @@ def plan(art, out, pad_top=0, hat='Hat', log=print):
     have = lambda n: (art/f'{n}.png').exists()
 
     s1 = V('S1-segment')
-    painted = np.stack([np.abs(s1-np.float32(c)).max(2) for c in PALETTE.values()], 2).min(2) < 110
+    keys = [k for k in LABEL_ORDER if k != 'tail' or twin_tails(s1)]
+    painted = np.stack([np.abs(s1-np.float32(PALETTE[k])).max(2) for k in keys], 2).min(2) < 110
     fig_a = figure_alpha(B, keep=erode(painted, 3))
     if have('B0-black-bg'):
         K = V('B0-black-bg').copy()
         K[:pad_top] = 0                                                  # the added rows are its page too
         fig_a = two_background_alpha(B, K, fig_a)
     fig = fig_a > .5
-    S = label_map(s1, fig, LABEL_ORDER)
+    S = label_map(s1, fig, keys)
+    if 'tail' in S:
+        # twin tails are back hair to this split; the See-through merge cuts them apart
+        S['hair'] |= S.pop('tail')
     v3 = V(base_of('V5-blank-face', have)); v5 = V('V5-blank-face')     # the head without its front hair
     # V4 recolours only the head: an unchanged pixel that happens to be near
     # a palette colour (a mint cardigan next to neck cyan) is not a label
@@ -868,6 +904,13 @@ def plan(art, out, pad_top=0, hat='Hat', log=print):
                 notch = keep_large(cv2.morphologyEx(hull & ~solid, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)) > 0, 20)
                 rgb = np.where(notch[..., None], V(MOUTHS[nm]), rgb)
                 a = np.maximum(a, notch.astype(np.float32))
+                # inside its outline every pixel is mouth, in the edit's own colour:
+                # teeth as pale as the skin otherwise matte half clear, in the
+                # colour of the lip line next to them (grey blocks along the upper
+                # lip); a highlight the edit drew under the lower lip, apart, goes
+                inside = erode(hull > 0, 1)
+                rgb = np.where(inside[..., None], V(MOUTHS[nm]), rgb)
+                a = np.where(inside, 1., a*dilate(hull > 0, 1)).astype(np.float32)
             stack.add(f'Mouth_{nm}', 'head', rgb, a, False)
     rgb, a = matte(v3, v5, dilate(mouth['mask'], 6), hi=25., grow=None)
     stack.add('Mouth_Closed', 'head', rgb, a)
