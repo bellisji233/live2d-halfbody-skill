@@ -6,11 +6,9 @@ Give an AI agent (such as Claude Code) one character illustration or a text desc
 
 ![Second character: rest pose, three gestures, head turn during a gesture, blush](assets/示例.jpg)
 
-![Two characters in VTube Studio: talking, blinking, head turns, hair and pendant swinging](assets/demo.gif)
+![Second character in VTube Studio: talking, blinking, expressions, gestures](assets/demo-beret.gif) ![Beanie character: long hair swinging, blinking, smiling eyes, O mouth, head turns](assets/demo-beanie.gif)
 
-![Third character: no bangs, hair tucked behind the ears, glasses, earrings](assets/demo-glasses.gif)
-
-![Fourth character: twin tails swinging from the hair ties, glasses, expressions and three gestures](assets/demo-twintails.gif)
+![Third character: no bangs, hair tucked behind the ears, glasses, earrings](assets/demo-glasses.gif) ![Fourth character: twin tails swinging from the hair ties, glasses, expressions and a gesture](assets/demo-twintails.gif)
 
 ## Features
 

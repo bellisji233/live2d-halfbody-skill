@@ -6,11 +6,9 @@
 
 ![第二个角色：静止、三个手势、手势中转头、脸红](assets/示例.jpg)
 
-![两个角色在 VTube Studio 里：说话、眨眼、转头，头发和吊坠摆动](assets/demo.gif)
+![第二个角色在 VTube Studio 里：说话、眨眼、表情、手势](assets/demo-beret.gif) ![毛线帽角色：长发摆动、眨眼、笑眼、O 型嘴、转头](assets/demo-beanie.gif)
 
-![第三个角色：没有刘海、头发别在耳后、眼镜、耳坠](assets/demo-glasses.gif)
-
-![第四个角色：双马尾从发绳往下各自摆动，眼镜、表情和三个手势](assets/demo-twintails.gif)
+![第三个角色：没有刘海、头发别在耳后、眼镜、耳坠](assets/demo-glasses.gif) ![第四个角色：双马尾从发绳往下各自摆动，眼镜、表情和手势](assets/demo-twintails.gif)
 
 ## 能做什么
 
