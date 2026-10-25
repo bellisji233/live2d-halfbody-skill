@@ -18,6 +18,9 @@ The edits are made from the model at rest, not from the art, so they are drawn
 the way the layers look (See-through's softer rendering when its layers are
 used), and switching a gesture on does not change the style of the body.
 A check sheet (手势和脸红.png) shows each edit beside the model with it on.
+When the layers have changed since R0-rest was written (the clothes
+reordered), a run measures what each edit changed against R0-rest there, and
+takes the rest of the pose from the layers as they are now: no new edits.
 """
 from pathlib import Path
 import argparse, json
@@ -183,9 +186,19 @@ def run(art, folder, log=print):
         log(f'已写出 {rest_png.name}（图层静止合成）。下一步：python -m rigkit.variants {art} {" ".join(EDITS)}')
         return
     old = load(rest_png, pad_top)
-    drift = np.abs(old-rest).max(2)[pad_top:].mean()
-    if drift > 1.5:
-        log(f'  注意：图层和 {REST}.png 不一致（平均差 {drift:.1f}），图层改过时删掉 {REST}.png 和这几张变体重出')
+    off = np.abs(old-rest).max(2)[pad_top:] > 8
+    # the layers changed since the edits were made (the clothes reordered): what
+    # an edit changed is measured against R0-rest, which it was made from; the
+    # rest of the pose is the body as it is now. Against the new rest, the
+    # parts that changed would count as redrawn by every edit, and a gesture
+    # would bring the old drawing of them back
+    ref = rest
+    if off.sum() > 500:
+        changed_since = np.zeros(rest.shape[:2], bool)
+        changed_since[pad_top:] = off
+        changed_since = dilate(changed_since, 4)
+        ref = np.where(changed_since[..., None], old, rest)
+        log(f'  图层和 {REST}.png 有 {int(off.sum())} px 不同：那里变体改了哪里按 {REST}.png 算，画面用现在的图层')
 
     group = {l['name']: l['group'] for l in doc['layers']}
     # a dangle stays on top of every pose with its own swing
@@ -207,7 +220,7 @@ def run(art, folder, log=print):
         if not (art/f'{edit_name}.png').exists():
             continue
         v, drift = edit(art/f'{edit_name}.png', rest, pad_top)
-        rgb, a, changed = pose_layer(v, rest, figure, body_flat, allowed, reach, hair_holes)
+        rgb, a, changed = pose_layer(v, ref, figure, body_flat, allowed, reach, hair_holes)
         save(folder, doc, layer, 'pose', rgb, a, after=body+[p for p in POSES.values()])
         L[layer] = (rgb, a)
         model, _ = over(base[:first]+[layer]+base[last+1:], L)
@@ -220,7 +233,7 @@ def run(art, folder, log=print):
         _, on_face = over(base[i+1:], L)
         face_shows = erode((L['Face_Skin'][1] > .5) & (on_face < .02), 2)
         cx = _centre_x(L, ['Nose', 'Mouth_Closed', 'Face_Skin'])
-        res = flush_layers(v, rest, L['Face_Skin'][1], face_shows, cx)
+        res = flush_layers(v, ref, L['Face_Skin'][1], face_shows, cx)
         if res is None:
             log(f'  {BLUSH}：脸上没有找到变化，没有生成脸红层')
         else:

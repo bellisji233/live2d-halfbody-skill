@@ -70,6 +70,7 @@ EXPRESSIONS = {'D5-eyes-closed': 'Eye_Closed', 'D6-eyes-smile': 'Eye_Smile'}
 HEAD_TAGS = ['headwear', 'face', 'irides', 'eyebrow', 'eyewhite', 'eyelash', 'eyewear', 'ears', 'earwear', 'nose', 'mouth']
 SPILL, SPILL_AREA = 8, 200    # px beyond our part (or what hides it) that See-through may run on; least area cut
 MISS, MISS_WIDTH, MISS_AREA = 60, 8, 300   # off from the art by this much, this wide (px radius) and large: ours
+SLEEVE_MARGIN = 5             # topwear back on top of a sleeve when it is closer to the art by this much (0-255)
 
 
 def st_layer(folder, name, size, pad_top):
@@ -110,11 +111,48 @@ def offset_field(diff, known, sigma=(6., 24., 80.)):
     return out
 
 
-def st_shapes(S, R, H, W, over_locks=None, parts=ST_PARTS):
+def sleeves_under(S, B, hidden, log=print):
+    """Where See-through's topwear and a sleeve (handwear) overlap, the one whose
+    drawing matches the art there lies on top, piece by piece: the sleeves go
+    on top of the topwear by default, and on 毛线帽 they covered the jacket's
+    collar points and the white trim down its front (all four characters match
+    the art better with the topwear on top at the shoulders, the sleeves on top
+    lower down by the wrists). Only what shows at rest decides (hidden: covered
+    by our layers above the clothes). Returns where the topwear goes back on
+    top, with the sleeve's soft edge round each piece, or None."""
+    if 'topwear' not in S:
+        return None
+    top = S['topwear']
+    back = np.zeros(top[1].shape, bool)
+    for h in ('handwear-r', 'handwear-l'):
+        if h not in S:
+            continue
+        for c in components((top[1] > .5) & (S[h][1] > .5), 30):
+            seen = c & ~hidden
+            if seen.sum() < 30:
+                continue
+            off_top = np.abs(top[0]-B).max(2)[seen].mean()
+            off_sleeve = np.abs(S[h][0]-B).max(2)[seen].mean()
+            if off_top+SLEEVE_MARGIN < off_sleeve:
+                back |= dilate(c, 3)
+                log(f'  Body：{h} 和 topwear 重叠的 {int(c.sum())} px 改成 topwear 在上'
+                    f'（和原画差 {off_top:.0f}，袖子在上时 {off_sleeve:.0f}）')
+    return back if back.any() else None
+
+
+def st_shapes(S, R, H, W, over_locks=None, parts=ST_PARTS, topwear_back=None):
     """Our layers cut from See-through's: the big parts, the front hair split into
     our locks, and the eyes and brows (shape and See-through's colour).
-    over_locks: what our split draws above all the locks (the hat)."""
-    shapes = {k: over([S[n] for n in v if n in S]) for k, v in parts.items() if any(n in S for n in v)}
+    over_locks: what our split draws above all the locks (the hat).
+    topwear_back: where the topwear goes back on top of the sleeves (sleeves_under)."""
+    def stack(v):
+        layers = [S[n] for n in v if n in S]
+        if topwear_back is not None and 'topwear' in v and 'topwear' in S:
+            at = max(i for i, n in enumerate([n for n in v if n in S]) if n == 'topwear' or n.startswith('handwear'))
+            rgb, a = S['topwear']
+            layers.insert(at+1, (rgb, (a*topwear_back).astype(np.float32)))
+        return over(layers)
+    shapes = {k: stack(v) for k, v in parts.items() if any(n in S for n in v)}
     if 'Neck' in R and 'Body' in R:
         # See-through's clothes run on over the neck seen in the collar opening
         # (it puts the neck under them); our body has the opening, as our split had it
@@ -296,7 +334,12 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
     locks_at = [names.index(n) for n in LOCKS if n in names]
     hat = [np.minimum(R[n][1], over([S[x] for x in parts[n] if x in S])[1]) for n in names[max(locks_at)+1:]
            if n in parts and any(x in S for x in parts[n])] if locks_at else []
-    shapes, fshapes = st_shapes(S, R, H, W, np.maximum.reduce(hat) if hat else None, parts)
+    above = np.zeros((H, W), np.float32)               # our layers over the clothes at rest
+    for l in layout[names.index('Body')+1:] if 'Body' in names else []:
+        if l['visible'] and l['name'] in R:
+            above = R[l['name']][1]+(1-R[l['name']][1])*above
+    back = sleeves_under(S, B, above > .9, log)
+    shapes, fshapes = st_shapes(S, R, H, W, np.maximum.reduce(hat) if hat else None, parts, back)
     shapes.update({n: shape for _, n, shape in extra})
     # the closed mouth and the nose are ours, as drawn in the art: See-through
     # draws them thinner and lopsided, with a faint haze over the whole canvas
