@@ -116,11 +116,20 @@ python -m rigkit.seethrough fetch 素材/角色名/A0-base.png 素材/角色名/
 python -m rigkit.seethrough split 素材/角色名 素材/角色名/layers 素材/角色名/layers-st --pad-top 90
 ```
 
-`fetch` 先试 Hugging Face，没跑成再换魔搭（`--site hf` 或 `--site modelscope` 指定一个），各用能给的最高分辨率。也可以把网页版、ComfyUI 或自己显卡跑出的 PSD 交给它：`fetch 那个.psd 素材/角色名/seethrough`。
+`fetch` 先试 Hugging Face，没跑成再换魔搭（`--site hf` 或 `--site modelscope` 指定一个），各用能给的最高分辨率。也可以把网页版、ComfyUI 或自己显卡跑出的 PSD 交给它：`fetch 那个.psd 素材/角色名/seethrough`。本机装了 See-through 时用 `--site local`：不传图，不占额度（见“环境”）。
 
 最终图层必须走 See-through：自拆的图层动起来边缘有碎点、被挡住的头发补不全，不单独交付。当天没有额度时，换另一个网站、等第二天，或者用 PSD。
 
 `split` 会逐条打印它对 See-through 图层做的修正（裁掉画到别处的、挪回归错的配饰、补漏画的部件），规则见 [规则](references/规则.md) 的“See-through 合成”。看 `layers-st/拆层总览.png`：每层只有自己的东西，静止合成和立绘只差在画风。
+
+闭眼、笑眼是自拆的。它们带进旁边的线或边缘毛躁、同一处改两次还在时，把这两张变体交给 See-through 拆，再跑一次上面的 `split`，它会改用 See-through 的睫毛层（规则第 103 条）：
+
+```
+python -m rigkit.seethrough fetch 素材/角色名/D5-eyes-closed.png 素材/角色名/seethrough-D5-eyes-closed
+python -m rigkit.seethrough fetch 素材/角色名/D6-eyes-smile.png 素材/角色名/seethrough-D6-eyes-smile
+```
+
+传到网站同样先问用户，每张占一次额度。本机跑时加 `--site local --head-from 素材/角色名/seethrough`，只拆头部。
 
 然后做手势和脸红：
 
@@ -219,6 +228,7 @@ python -m rigkit.vts 角色/角色名/character.json --install
 - **See-through**（拆层），两个网站跑的是同一个模型，至少准备一个：
   - **Hugging Face**（首选，几分钟一次，最高 1280）：不登录时每天的免费显卡时间不一定够跑一次；用户注册免费账号、建一个 Read token，放进环境变量 `HF_TOKEN` 或 `~/.cache/huggingface/token`（`hf auth login` 存的位置），每天约 1～2 次。
   - **魔搭 ModelScope**（备用，免费，最高 1536）：用户注册账号、建一个访问令牌，放进环境变量 `MODELSCOPE_API_TOKEN` 或 `~/.cache/modelscope/token`。要排队，一次可能半小时。1536 的头发轮廓和眼睛比 1280 更接近原画。
+  - **本机**（可选，不传图，不限次数）：在 Apple 芯片、24 GB 内存上验证过，1280 整张约 21 分钟，只拆头部约 9 分钟；第一次运行下载约 13 GB 模型。装好后把环境变量 `SEETHROUGH_DIR` 指向它，装法见 [出图](references/出图.md) 的“本机跑 See-through”。
 - **VTube Studio**（Steam 版）。
 - **Live2D Cubism Core**（预览、自查、图标要用）：装了 Cubism Editor 时自动找到；否则下载 Cubism SDK for Native，把环境变量 `CUBISM_CORE` 指向其中的 Core 动态库。Core 按 Live2D 的许可使用，不随本 skill 分发。
 
@@ -229,4 +239,4 @@ macOS 上验证过；Windows 未验证。
 - 摄像头手势（张开手掌 = 招手、双手张开 = 摊手、竖食指 = 指向）：第一个角色能触发，第二个角色配置逐字段相同却不触发，原因未查明。快捷键 N5～N7 不受影响。
 - 静止时是 See-through 画的样子，比原画软一点，睫毛、发梢描边的细节少一些。
 - 戴眼镜、镜框紧挨双眼皮时，See-through 会丢掉双眼皮线，在睫毛上沿画一道浅灰带，按原样保留。
-- 眼尾贴着脸颊和耳朵之间的轮廓线时（毛线帽），闭眼和笑眼图层会带进一小段这条轮廓线，转头时在脸边露出来。
+- 眼尾贴着脸颊和耳朵之间的轮廓线时（毛线帽），自拆的闭眼和笑眼图层会带进一小段这条轮廓线，转头时在脸边露出来。把这两张变体交给 See-through 拆可以去掉（第 3 步）。

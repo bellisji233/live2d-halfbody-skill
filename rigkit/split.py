@@ -158,20 +158,29 @@ def align(img, ref):
     return out, (float(dx), float(dy)), float(resp)
 
 
-def match_colours(img, ref, tol=25.):
-    """Per-channel gain and offset that bring a variant's colours onto the
-    base, fitted on pixels that did not change (image models drift)."""
+def colour_fit(img, ref, tol=25.):
+    """Per-channel (gain, offset) that bring a variant's colours onto the
+    base, fitted on pixels that did not change (image models drift); None
+    when too few did not."""
     same = np.abs(img-ref).max(2) < tol
     same &= (ref.min(2) < 250)                         # the page says nothing about drift
     if same.sum() < 1000:
+        return None
+    return [tuple(np.polyfit(img[..., c][same], ref[..., c][same], 1)) for c in range(3)]
+
+
+def apply_colour_fit(img, fit):
+    if fit is None:
         return img, '无'
-    out = img.copy(); fit = []
-    for c in range(3):
-        x, y = img[..., c][same], ref[..., c][same]
-        a, b = np.polyfit(x, y, 1)
+    out = img.copy()
+    for c, (a, b) in enumerate(fit):
         out[..., c] = img[..., c]*a+b
-        fit.append(f'{a:.3f}×{b:+.1f}')
-    return np.clip(out, 0, 255), ' '.join(fit)
+    return np.clip(out, 0, 255), ' '.join(f'{a:.3f}×{b:+.1f}' for a, b in fit)
+
+
+def match_colours(img, ref, tol=25.):
+    """The variant's colours brought onto the base (colour_fit)."""
+    return apply_colour_fit(img, colour_fit(img, ref, tol))
 
 
 def lum(rgb):

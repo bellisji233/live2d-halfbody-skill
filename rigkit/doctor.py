@@ -1,6 +1,7 @@
 """Check what a run needs before any image is generated: Python and its
-libraries, the Codex CLI and its login, a See-through token, Cubism Core,
-ffmpeg and the VTube Studio models folder. Token files are only looked
+libraries, the Codex CLI and its login, a See-through token (or See-through
+on this machine, when SEETHROUGH_DIR is set), Cubism Core, ffmpeg and the
+VTube Studio models folder. Token files are only looked
 for, never read out.
 
   python -m rigkit.doctor
@@ -39,12 +40,23 @@ def checks():
             logged = False
         yield logged, False, 'Codex 命令行', CODEX if logged else f'{CODEX} 未登录：运行 codex login，用 ChatGPT 账号登录'+other
 
+    local = None                                        # See-through on this machine (fetch --site local)
+    if os.environ.get('SEETHROUGH_DIR'):
+        home = Path(os.environ['SEETHROUGH_DIR']).expanduser()
+        py = Path(os.environ.get('SEETHROUGH_PYTHON') or home/'.venv/bin/python').expanduser()
+        utils = home/'common/utils/inference_utils.py'
+        local = ((False, f'{home} 不是 See-through 的目录') if not utils.exists() else
+                 (False, f'找不到它的 Python：{py}，或用 SEETHROUGH_PYTHON 指定') if not py.exists() else
+                 (False, '还没打补丁：在它的目录里 git apply <skill 目录>/rigkit/vendor/see-through-mac.patch')
+                 if 'DEVICE =' not in utils.read_text() else (True, str(home)))
     hf = bool(os.environ.get('HF_TOKEN')) or Path('~/.cache/huggingface/token').expanduser().exists()
     ms = bool(os.environ.get('MODELSCOPE_API_TOKEN')) or Path('~/.cache/modelscope/token').expanduser().exists()
     sites = '、'.join(n for n, has in (('Hugging Face', hf), ('魔搭', ms)) if has)
-    yield hf or ms, False, 'See-through 令牌', sites or (
+    yield hf or ms or bool(local and local[0]), False, 'See-through 令牌', sites or ('没有；本机跑时不需要' if local and local[0] else
         '没有：Hugging Face 不登录的额度不一定够跑一次。建一个 Read token 放进 HF_TOKEN 或 '
         '~/.cache/huggingface/token，或魔搭访问令牌放进 MODELSCOPE_API_TOKEN 或 ~/.cache/modelscope/token')
+    if local:
+        yield local[0], False, '本机 See-through', local[1]
 
     from .core import _find_core, core_version
     try:

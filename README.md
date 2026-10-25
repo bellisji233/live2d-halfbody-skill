@@ -44,7 +44,7 @@ For hairstyles or accessories outside this list (animal ears, braids), ask the a
 ## What you do
 
 1. Approve the illustration the agent generates.
-2. Agree to upload it to [See-through](https://github.com/shitagaki-lab/see-through) for layer separation (Hugging Face, ModelScope as backup).
+2. Agree to upload it to [See-through](https://github.com/shitagaki-lab/see-through) for layer separation (Hugging Face, ModelScope as backup; not needed when See-through runs on your Mac).
 3. Check the avatar in VTube Studio against the checklist, then reply "pass" or "fail: what's wrong".
 
 ## Requirements
@@ -52,9 +52,10 @@ For hairstyles or accessories outside this list (animal ears, braids), ask the a
 - An AI agent that runs skills, such as Claude Code
 - Python 3.10+, ffmpeg
 - A ChatGPT account: images are generated with the Codex CLI (bundled with the ChatGPT desktop app). Another image tool that can edit images can be used instead (not yet tested on a full character)
-- An account for See-through, at least one of:
+- See-through, at least one of:
   - Hugging Face, free (preferred, a few minutes per run): create a Read token and put it in the `HF_TOKEN` environment variable or `~/.cache/huggingface/token`. Without logging in, the daily free quota may not cover one run; logged in, about 1–2 runs a day
   - ModelScope, free (backup; queued, a run can take half an hour; higher resolution): create an access token and put it in `MODELSCOPE_API_TOKEN` or `~/.cache/modelscope/token`
+  - Or run See-through on your own Mac (optional; nothing is uploaded, no quota): tested on Apple silicon with 24 GB of memory, about 21 minutes per illustration. Setup in [references/出图.md](references/出图.md) (“本机跑 See-through”)
 - VTube Studio
 - Live2D Cubism Core: included with Cubism Editor, or download the free Cubism SDK for Native
 

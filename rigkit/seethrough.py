@@ -1,6 +1,8 @@
 """Layers from See-through (shitagaki-lab/see-through), joined to our own split.
 
-  python -m rigkit.seethrough fetch IMAGE ART_FOLDER/seethrough [--site auto|hf|modelscope] [--res N]
+  python -m rigkit.seethrough fetch IMAGE ART_FOLDER/seethrough [--site auto|hf|modelscope|local] [--res N]
+  python -m rigkit.seethrough fetch ART_FOLDER/D5-eyes-closed.png ART_FOLDER/seethrough-D5-eyes-closed \
+      [--site local --head-from ART_FOLDER/seethrough]
   python -m rigkit.seethrough split ART_FOLDER BASE_LAYERS OUT [--pad-top 90]
 
 fetch sends IMAGE to a public See-through demo and writes one full-canvas PNG
@@ -18,6 +20,14 @@ Each runs at the highest resolution it offers (Hugging Face 1280, ModelScope
 closer to the art.
 Given a .psd instead of an image (made on a demo's web page, in ComfyUI or
 on one's own GPU), it only unpacks that PSD.
+--site local runs See-through on this machine instead (seethrough_local.py
+in See-through's own environment, SEETHROUGH_DIR): nothing is sent, no
+quota. Verified on an Apple M5 Pro with 24 GB at 1280: the whole image in
+about 21 minutes, the head pass alone (--head-from) in about 9.
+
+An expression variant run through See-through (seethrough-D5-eyes-closed,
+seethrough-D6-eyes-smile next to seethrough/) gives the closed or smiling
+eye: split takes that run's lash layer in place of ours.
 
 split: ART_FOLDER holds A0-base.png and seethrough/. BASE_LAYERS is our own
 split (rigkit.split): See-through has no expressions, cuts the front hair as
@@ -39,7 +49,7 @@ import cv2
 from PIL import Image
 
 from .split import (Stack, load, components, _u8, dilate, erode, keep_large, fill_holes, hue_distance, rest_image, sheet,
-                    figure_alpha, lum, align, twin_tails, PALETTE)
+                    figure_alpha, lum, align, colour_fit, apply_colour_fit, twin_tails, PALETTE)
 
 ST_PARTS = {                      # our layer -> See-through layers, bottom first
     'Hair_Back': ['back hair'],
@@ -54,6 +64,10 @@ FEATURES = {'Brow_Neutral_L': 'eyebrow-r', 'Brow_Neutral_R': 'eyebrow-l',
             'Eye_White_L': 'eyewhite-r', 'Eye_White_R': 'eyewhite-l',
             'Iris_L': 'irides-r', 'Iris_R': 'irides-l'}
 LASHES = {'L': 'eyelash-r', 'R': 'eyelash-l'}        # cut into our lash, crease and lower lash
+# expression variants See-through may be run on (ART/seethrough-<variant>/):
+# its lash layer of the variant is then our closed or smiling eye
+EXPRESSIONS = {'D5-eyes-closed': 'Eye_Closed', 'D6-eyes-smile': 'Eye_Smile'}
+HEAD_TAGS = ['headwear', 'face', 'irides', 'eyebrow', 'eyewhite', 'eyelash', 'eyewear', 'ears', 'earwear', 'nose', 'mouth']
 SPILL, SPILL_AREA = 8, 200    # px beyond our part (or what hides it) that See-through may run on; least area cut
 MISS, MISS_WIDTH, MISS_AREA = 60, 8, 300   # off from the art by this much, this wide (px radius) and large: ours
 
@@ -189,11 +203,48 @@ def st_shapes(S, R, H, W, over_locks=None, parts=ST_PARTS):
     return shapes, fshapes
 
 
+def expression_lashes(art, B, R, pad_top, log=print):
+    """Our closed and smiling eyes from See-through's lash layer of D5 / D6,
+    for each variant See-through has been run on. Shifted and recoloured as
+    our split takes the variant (align, colour_fit). A run of the whole
+    image has the lash in two (eyelash-r / -l); a head-only local run has it
+    in one, split halfway between our open lashes."""
+    H, W = B.shape[:2]
+    size = (W, H-pad_top)
+    out = {}
+    for variant, ours in EXPRESSIONS.items():
+        st = art/f'seethrough-{variant}'
+        if not (art/f'{variant}.png').exists() or not st.is_dir():
+            continue
+        img, (dx, dy), _ = align(load(art/f'{variant}.png', pad_top, size), B)
+        fit = colour_fit(img, B)
+        M = np.float32([[1, 0, -dx], [0, 1, -dy]])
+        move = lambda x: cv2.warpAffine(x, M, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+        if all((st/f'{LASHES[s]}.png').exists() for s in 'LR'):
+            sides = {s: st_layer(st, LASHES[s], size, pad_top) for s in 'LR'}
+        elif (st/'eyelash.png').exists():
+            rgb, a = st_layer(st, 'eyelash', size, pad_top)
+            xs = [np.nonzero(R[f'Eye_Open_{s}'][1] > .5)[1].mean() for s in 'LR']
+            mid = int(round(sum(xs)/2))
+            sides = {}
+            for s, cols in (('L', slice(0, mid)), ('R', slice(mid, W))):
+                m = np.zeros_like(a); m[:, cols] = a[:, cols]
+                sides[s] = (rgb, m)
+        else:
+            log(f'  {st.name} 里没有睫毛层，{ours} 用自拆')
+            continue
+        for s, (rgb, a) in sides.items():
+            rgb, _ = apply_colour_fit(move(rgb), fit)
+            out[f'{ours}_{s}'] = (rgb.astype(np.float32), np.clip(move(a), 0, 1).astype(np.float32))
+        log(f'  {ours}_L/R：See-through 拆 {variant} 的睫毛层，对位偏移 {np.hypot(dx, dy):.1f} px')
+    return out
+
+
 def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
     """See-through's layers as it draws them, colour included: nothing of the
     art is fitted into them, so no part carries a pixel of its neighbour. Ours
-    only where See-through has nothing (expressions; the closed mouth and nose
-    too, which it draws poorly) and where its hidden fill is poor (the forehead under the fringe: V5;
+    only where See-through has nothing (expressions, unless it has been run on
+    the variant: expression_lashes; the closed mouth and nose too, which it draws poorly) and where its hidden fill is poor (the forehead under the fringe: V5;
     the inside of the back hair: V8), shifted to meet its colours."""
     art, base_layers, out = Path(art), Path(base_layers), Path(out)
     st = art/'seethrough'
@@ -257,6 +308,10 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
         if tips in R:
             fshapes[tips] = (R[tips][0], np.zeros((H, W), np.float32))
     shapes.update(fshapes)
+    # closed and smiling eyes as See-through draws them, when it has been run on
+    # that variant: ours carry what the image model redrew beside the eye (a
+    # stretch of the cheek line by the ear) and ragged edges
+    shapes.update({n: v for n, v in expression_lashes(art, B, R, pad_top, log).items() if n in R})
     vis = {l['name']: l['visible'] for l in layout}
     order = [l['name'] for l in layout][::-1]
     group = {l['name']: l['group'] for l in layout}
@@ -593,12 +648,71 @@ def modelscope_token():
     return os.environ.get('MODELSCOPE_API_TOKEN') or (path.read_text().strip() if path.exists() else None)
 
 
-def fetch(image, out, res=None, seed=42, site='auto', log=print):
-    """Run a See-through demo (Hugging Face, ModelScope when that fails) and write its layers as PNGs."""
+def head_box(folder, res):
+    """The head in a See-through run of the same image (any site): its face
+    and ears, as the body pass's head layer has it, at resolution res."""
+    boxes = []
+    for n in ('face', 'ears', 'ears-l', 'ears-r'):
+        p = Path(folder)/f'{n}.png'
+        if p.exists():
+            a = np.asarray(Image.open(p).convert('RGBA'))[..., 3] > 128
+            if a.any():
+                ys, xs = np.nonzero(a)
+                boxes.append((xs.min(), ys.min(), xs.max()+1, ys.max()+1, a.shape[1]))
+    if not boxes:
+        raise SystemExit(f'{folder} 里没有脸和耳朵的图层，找不到头')
+    k = res/boxes[0][4]
+    x0, y0 = min(b[0] for b in boxes), min(b[1] for b in boxes)
+    x1, y1 = max(b[2] for b in boxes), max(b[3] for b in boxes)
+    return [int(x0*k), int(y0*k), int((x1-x0)*k), int((y1-y0)*k)]
+
+
+def fetch_local(image, out, res=None, seed=42, head_from=None, log=print):
+    """See-through on this machine: seethrough_local.py with See-through's
+    own Python (SEETHROUGH_DIR, its .venv or SEETHROUGH_PYTHON)."""
+    import os, shutil, subprocess, tempfile
+    home = os.environ.get('SEETHROUGH_DIR')
+    if not home or not (Path(home).expanduser()/'common').is_dir():
+        raise SystemExit('本机跑 See-through：把环境变量 SEETHROUGH_DIR 指向 See-through 的目录（装法见 references/出图.md）')
+    home = Path(home).expanduser()
+    py = Path(os.environ.get('SEETHROUGH_PYTHON') or home/'.venv/bin/python').expanduser()
+    if not py.exists():
+        raise SystemExit(f'找不到 See-through 的 Python：{py}（或用 SEETHROUGH_PYTHON 指定）')
+    r = res or 1280
+    image = Path(image).resolve()
+    with tempfile.TemporaryDirectory() as tmp:
+        cmd = [str(py), str(Path(__file__).with_name('seethrough_local.py')), '--srcp', str(image),
+               '--save_dir', tmp, '--resolution', str(r), '--seed', str(seed)]
+        if head_from:
+            cmd += ['--head-box', ','.join(map(str, head_box(head_from, r)))]
+        log(f'  See-through（本机），分辨率 {r}'+('，只拆头部' if head_from else ''))
+        env = {**os.environ, 'PYTORCH_ENABLE_MPS_FALLBACK': '1',
+               # the MPS allocator keeps what it freed (25 GB held for 10 GB in use)
+               'PYTORCH_MPS_HIGH_WATERMARK_RATIO': os.environ.get('PYTORCH_MPS_HIGH_WATERMARK_RATIO', '1.0'),
+               'PYTORCH_MPS_LOW_WATERMARK_RATIO': os.environ.get('PYTORCH_MPS_LOW_WATERMARK_RATIO', '0.6')}
+        if subprocess.run(cmd, cwd=home, env=env).returncode:
+            raise SystemExit('See-through 没有跑成（本机），见上面的输出')
+        if not head_from:
+            return unpack(Path(tmp)/f'{image.stem}.psd', out, log)
+        for t in HEAD_TAGS:
+            p = Path(tmp)/image.stem/f'{t}.png'
+            if p.exists():
+                shutil.copy(p, out/p.name)
+                log(f'  {t}')
+    return out
+
+
+def fetch(image, out, res=None, seed=42, site='auto', head_from=None, log=print):
+    """Run See-through (a demo: Hugging Face, ModelScope when that fails; or
+    this machine) and write its layers as PNGs."""
     import os
     out = Path(out); out.mkdir(parents=True, exist_ok=True)
     if Path(image).suffix.lower() == '.psd':
         return unpack(image, out, log)
+    if site == 'local':
+        return fetch_local(image, out, res, seed, head_from, log)
+    if head_from:
+        raise SystemExit('--head-from 只用于本机（--site local）')
     try:
         from gradio_client import Client, handle_file
         import psd_tools  # noqa: F401  (unpack needs it; fail before the GPU run, not after)
@@ -667,8 +781,9 @@ def unpack(psd, out, log=print):
         from psd_tools import PSDImage
     except ImportError:
         raise SystemExit('需要 psd-tools：pip install psd-tools')
-    if Path(psd).resolve() != (out.parent/'seethrough.psd').resolve():
-        shutil.copy(psd, out.parent/'seethrough.psd')
+    keep = out.parent/f'{out.name}.psd'                 # seethrough.psd, seethrough-D5-eyes-closed.psd
+    if Path(psd).resolve() != keep.resolve():
+        shutil.copy(psd, keep)
     doc = PSDImage.open(psd)
     for layer in doc.descendants():
         if layer.is_group():
@@ -688,12 +803,13 @@ def main():
     sub = ap.add_subparsers(dest='cmd', required=True)
     f = sub.add_parser('fetch'); f.add_argument('image'); f.add_argument('out')
     f.add_argument('--res', type=int, default=None); f.add_argument('--seed', type=int, default=42)
-    f.add_argument('--site', choices=['auto', 'hf', 'modelscope'], default='auto')
+    f.add_argument('--site', choices=['auto', 'hf', 'modelscope', 'local'], default='auto')
+    f.add_argument('--head-from', default=None, help='local: a See-through folder of the image this one is a variant of; head pass only')
     p = sub.add_parser('split'); p.add_argument('art'); p.add_argument('base'); p.add_argument('out')
     p.add_argument('--pad-top', type=int, default=0)
     a = ap.parse_args()
     if a.cmd == 'fetch':
-        fetch(a.image, a.out, a.res, a.seed, a.site)
+        fetch(a.image, a.out, a.res, a.seed, a.site, a.head_from)
     else:
         plan_as_drawn(a.art, a.base, a.out, a.pad_top)
 

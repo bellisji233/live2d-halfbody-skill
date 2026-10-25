@@ -1,0 +1,101 @@
+See-through (https://github.com/shitagaki-lab/see-through, Apache-2.0) at
+commit df019de, changed to run on an Apple GPU (MPS). Apply in its folder:
+  git checkout df019de && git apply <skill>/rigkit/vendor/see-through-mac.patch
+- the device is cuda, mps or cpu, whichever there is (it was cuda only);
+- the models load in bf16 (they loaded in float32, then went to bf16: twice
+  the memory while loading, 26 GB on a 24 GB machine);
+- the transparent decoder decodes one layer at a time, and skips the median
+  of a single pass (MPS cannot sort 5-D tensors). Same results.
+The rest (attention, group_norm, tag embeddings) is patched at run time by
+rigkit/seethrough_local.py.
+
+diff --git a/common/modules/layerdiffuse/vae.py b/common/modules/layerdiffuse/vae.py
+index c24e47a..f163ca7 100644
+--- a/common/modules/layerdiffuse/vae.py
++++ b/common/modules/layerdiffuse/vae.py
+@@ -228,13 +228,16 @@ class TransparentVAEDecoder(torch.nn.Module):
+             result += [eps]
+             break
+ 
++        if len(result) == 1:      # one pass (see the break above); MPS cannot sort 5-D tensors
++            return result[0]
+         result = torch.stack(result, dim=0)
+         median = torch.median(result, dim=0).values
+         return median
+ 
+     @torch.no_grad()
+     def forward(self, sd_vae, latent, return_type='numpy', rgb_cond=None, mask=None, return_rgb=False):
+-        pixel = sd_vae.decode(latent).sample
++        # one layer at a time: the same result, without every layer's full-size activations at once
++        pixel = torch.cat([sd_vae.decode(l).sample for l in latent.split(1)], 0)
+         pixel = (pixel * 0.5 + 0.5).to(self.dtype)
+         latent = latent.to(self.dtype)
+         result_list = []
+diff --git a/common/utils/inference_utils.py b/common/utils/inference_utils.py
+index 770c5dc..cb211ee 100644
+--- a/common/utils/inference_utils.py
++++ b/common/utils/inference_utils.py
+@@ -17,6 +17,7 @@ import cv2
+ import numpy as np
+ import torch
+ from PIL import Image
++DEVICE = 'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu')
+ 
+ VALID_BODY_PARTS_V2 = [
+     'hair', 'headwear', 'face', 'eyes', 'eyewear', 'ears', 'earwear', 'nose', 'mouth', 
+@@ -32,16 +33,16 @@ def apply_layerdiff(
+     
+     global layerdiff_pipeline
+     if layerdiff_pipeline is None:
+-        trans_vae = TransparentVAE.from_pretrained(pretrained, subfolder='trans_vae')
++        trans_vae = TransparentVAE.from_pretrained(pretrained, subfolder='trans_vae', torch_dtype=torch.bfloat16)
+         if unet_ckpt is None:
+-            unet = UNetFrameConditionModel.from_pretrained(pretrained, subfolder='unet')
++            unet = UNetFrameConditionModel.from_pretrained(pretrained, subfolder='unet', torch_dtype=torch.bfloat16)
+         else:
+             print(f'load unet from {unet_ckpt}')
+             unet = UNetFrameConditionModel.from_pretrained(unet_ckpt)
+         layerdiff_pipeline = KDiffusionStableDiffusionXLPipeline.from_pretrained(
+             pretrained,
+             trans_vae=trans_vae, unet=unet,
+-            scheduler=None
++            scheduler=None, torch_dtype=torch.bfloat16
+         )
+ 
+         if vae_ckpt is not None:
+@@ -62,13 +63,13 @@ def apply_layerdiff(
+                 layerdiff_pipeline.trans_vae.decoder.load_state_dict(td_sd)
+                 print(f'load vae from {vae_ckpt}')
+ 
+-        layerdiff_pipeline.vae.to(dtype=torch.bfloat16, device='cuda')
+-        layerdiff_pipeline.trans_vae.to(dtype=torch.bfloat16, device='cuda')
+-        layerdiff_pipeline.unet.to(dtype=torch.bfloat16, device='cuda')
+-        layerdiff_pipeline.text_encoder.to(dtype=torch.bfloat16, device='cuda')
+-        layerdiff_pipeline.text_encoder_2.to(dtype=torch.bfloat16, device='cuda')
++        layerdiff_pipeline.vae.to(dtype=torch.bfloat16, device=DEVICE)
++        layerdiff_pipeline.trans_vae.to(dtype=torch.bfloat16, device=DEVICE)
++        layerdiff_pipeline.unet.to(dtype=torch.bfloat16, device=DEVICE)
++        layerdiff_pipeline.text_encoder.to(dtype=torch.bfloat16, device=DEVICE)
++        layerdiff_pipeline.text_encoder_2.to(dtype=torch.bfloat16, device=DEVICE)
+         if group_offload:
+-            layerdiff_pipeline.enable_group_offload('cuda', num_blocks_per_group=1)
++            layerdiff_pipeline.enable_group_offload(DEVICE, num_blocks_per_group=1)
+ 
+     pipeline = layerdiff_pipeline
+     if cache_tag_embeds:
+@@ -190,12 +191,12 @@ def apply_marigold(srcp, pretrained: str, num_inference_steps=-1, seed=0, save_d
+     resolution=768, normalize_depth=False, disable_progressbar=False, cache_tag_embeds=True, group_offload=False):
+     global marigold_pipeline
+     if marigold_pipeline is None:
+-        unet = UNetFrameConditionModel.from_pretrained(pretrained, subfolder='unet')
++        unet = UNetFrameConditionModel.from_pretrained(pretrained, subfolder='unet', torch_dtype=torch.bfloat16)
+         marigold_pipeline = MarigoldDepthPipeline.from_pretrained(pretrained, unet=unet)
+-        marigold_pipeline.to(device='cuda', dtype=torch.bfloat16)
++        marigold_pipeline.to(device=DEVICE, dtype=torch.bfloat16)
+ 
+         if group_offload:
+-            marigold_pipeline.enable_group_offload('cuda', num_blocks_per_group=1)
++            marigold_pipeline.enable_group_offload(DEVICE, num_blocks_per_group=1)
+ 
+     pipe = marigold_pipeline
+ 

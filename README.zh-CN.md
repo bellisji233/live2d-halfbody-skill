@@ -42,7 +42,7 @@ Agent 会把你给的立绘或描述重画成方便拆图层的版本，你确�
 ## 你要做的三件事
 
 1. 确认 Agent 生成的立绘。
-2. 同意把立绘传到 [See-through](https://github.com/shitagaki-lab/see-through) 拆图层（Hugging Face，备用魔搭）。
+2. 同意把立绘传到 [See-through](https://github.com/shitagaki-lab/see-through) 拆图层（Hugging Face，备用魔搭；在自己的 Mac 上跑时不用传）。
 3. 在 VTube Studio 里按清单看效果，回复“通过”或“不通过：哪里不对”。
 
 ## 需要什么
@@ -50,9 +50,10 @@ Agent 会把你给的立绘或描述重画成方便拆图层的版本，你确�
 - 一个能运行 skill 的 AI Agent，如 Claude Code
 - Python 3.10+，ffmpeg
 - ChatGPT 账号：用 Codex 命令行出图（ChatGPT 桌面版自带）。也可以换成其他能改图的图像工具（还没用它完整做过一个角色）
-- See-through 用的账号，至少一个：
+- See-through，以下至少一种：
   - Hugging Face 免费账号（首选，几分钟一次）：建一个 Read token，放进环境变量 `HF_TOKEN` 或 `~/.cache/huggingface/token`。不登录时每天的免费额度不一定够跑一次，登录后约每天 1～2 次
   - 魔搭 ModelScope 账号（备用，免费，要排队，一次可能半小时，分辨率更高）：建一个访问令牌，放进环境变量 `MODELSCOPE_API_TOKEN` 或 `~/.cache/modelscope/token`
+  - 或者在自己的 Mac 上跑 See-through（可选，不传图，不限次数）：Apple 芯片、24 GB 内存上验证过，一张立绘约 21 分钟。装法见 [references/出图.md](references/出图.md) 的“本机跑 See-through”
 - VTube Studio
 - Live2D Cubism Core：装 Cubism Editor 自带，或免费下载 Cubism SDK for Native
 
