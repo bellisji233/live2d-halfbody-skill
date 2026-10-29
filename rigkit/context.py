@@ -177,6 +177,7 @@ class Context:
         yy, xx = np.mgrid[:H, :W]
         s0, s1 = h['seam']
         self.hair_weights = {}
+        self.hair_free = {}               # the same without the face anchor
         # locks drawn behind the others (back hair) neither pin nor are pinned at seams
         seamed = [n for n in masks if h['locks'][n].get('seam', True)]
         for nm, mask in masks.items():
@@ -189,7 +190,8 @@ class Context:
             root = np.clip((yy-y0)/length, 0, 1) if length > 0 else np.clip((y0-yy)/-length, 0, 1)
             # a lock lying on the face (bangs) is not held by the face anchor
             pin = anchor_pin if h['locks'][nm].get('anchor', True) else 1.
-            self.hair_weights[nm] = seam*root**h['root_power']*pin
+            self.hair_free[nm] = seam*root**h['root_power']
+            self.hair_weights[nm] = self.hair_free[nm]*pin
 
     # ------------------------------------------------------------ distances
     def _distance_maps(self):

@@ -115,10 +115,19 @@ def estimate(art: Path, name: str):
     mw = (mouth_closed[2]-mouth_closed[0])
     variants = {k: v for k, v in {'-2': 'Frown', '-1': 'Line', '1': 'O', '2': 'Open'}.items() if f'Mouth_{v}' in names}
 
+    def three(lock, param, long=False):
+        """Three segments, each a beat after the one above (rig._segment,
+        vts.CHAIN); a long lock hangs on a longer pendulum."""
+        lock.update(tip=param+'2', mid=param+'3', bend=[round(23.4*sw, 1), round(26*sw, 1)])
+        if long:
+            lock['chain'] = {'length': [9., 9., 8.]}
+        return lock
+
     locks = {}
     top = face[1]
-    for nm, param, swing, pitch in [('Hair_Side_L', 'ParamHairSideL', 30, 12), ('Hair_Side_R', 'ParamHairSideR', 30, 12),
-                                    ('Hair_Bang', 'ParamHairBang', 13, 8), ('Hair_Bun', 'ParamHairBun', 10, 8)]:
+    # pitch: how far each lock bounces up and down on a nod (ParamHairPitch)
+    for nm, param, swing, pitch in [('Hair_Side_L', 'ParamHairSideL', 37.5, 26.5), ('Hair_Side_R', 'ParamHairSideR', 37.5, 26.5),
+                                    ('Hair_Bang', 'ParamHairBang', 17, 17.5), ('Hair_Bun', 'ParamHairBun', 10, 17.5)]:
         b = B(nm, 0)
         if b is None:
             continue
@@ -130,15 +139,14 @@ def estimate(art: Path, name: str):
             root = [round(float(top-16)), round(float(chin-top+16))]
         lock = dict(param=param, swing=round(swing*sw, 1), pitch=round(pitch*sh, 1), root=root)
         if 'Side' in nm:
-            lock['tip'] = param+'2'
+            three(lock, param)
         locks[nm] = lock
     b = B('Hair_Back', 0)
     if b is not None and b[3] > chin:
         # the back hair hangs below the jaw: its ends swing behind the side hair
         y0 = round(float(face[1]+face[3])/2)
-        locks['Hair_Back'] = dict(param='ParamHairBack', swing=round(22*sw, 1), pitch=round(8*sh, 1),
-                                  root=[y0, round(float(b[3]-y0))], tip='ParamHairBack2', seam=False,
-                                  physics={'length': 11.})
+        locks['Hair_Back'] = three(dict(param='ParamHairBack', swing=round(27.5*sw, 1), pitch=round(17.5*sh, 1),
+                                        root=[y0, round(float(b[3]-y0))], seam=False), 'ParamHairBack', long=True)
     for nm in ('Hair_Tail_L', 'Hair_Tail_R'):
         b = B(nm, 0)
         if b is None:
@@ -146,12 +154,13 @@ def estimate(art: Path, name: str):
         # a twin tail swings from its hair tie, freer further down
         y0 = round(float(b[1]+.12*(b[3]-b[1])))
         param = 'ParamHair'+nm[5:].replace('_', '')
-        locks[nm] = dict(param=param, swing=round(30*sw, 1), pitch=round(10*sh, 1), root=[y0, round(float(b[3]-y0))],
-                         tip=param+'2', seam=False, physics={'length': 11.})
+        locks[nm] = three(dict(param=param, swing=round(37.5*sw, 1), pitch=round(22*sh, 1), root=[y0, round(float(b[3]-y0))],
+                               seam=False), param, long=True)
     if 'Hair_Tail_L' in locks and 'Hair_Back' in locks:
         # the tails swing; what hangs at the nape stays close to the head
         locks['Hair_Back']['swing'] = round(locks['Hair_Back']['swing']*.3, 1)
-        locks['Hair_Back'].pop('tip', None)            # its tip segment swings as far as any lock's
+        for k in ('tip', 'mid', 'bend', 'chain'):       # its lower segments swing as far as any lock's
+            locks['Hair_Back'].pop(k, None)
     head_layers = [n for n in names if n.startswith(('Hair_', 'Face_', 'Ear_'))]
     hb = [B(n, 0) for n in head_layers if B(n, 0) is not None]
     # whatever else turns with the head (a hat above the hair) needs the lattice

@@ -74,11 +74,28 @@ MAPPINGS = [
 ]
 # per lock: pendulum length, mobility, delay (lower = more lag), acceleration,
 # output scale, tip output scale
-PHYSICS = dict(length=9., mobility=.92, delay=.38, accel=1.1, scale=8.5, tip_scale=10.)
+PHYSICS = dict(length=7., mobility=.92, delay=.85, accel=1.2, scale=3., tip_scale=3.5)
+# a lock in three segments (hair.locks.<lock>.mid): a four-point pendulum, each
+# point driving one segment, the lower ones relative to the one above, so a
+# swing runs from the root to the tip. Per point: length, mobility, delay,
+# acceleration, output scale. Set against VTube Studio's own sample models
+# (their hair: delay .8-.95, mobility .9-.96, outputs well inside the
+# parameter's range): an output that reaches the end of the range stops
+# flat there before it swings back, and the hair looks stiff.
+CHAIN = dict(length=(7., 7., 6.), mobility=(.9, .9, .88), delay=(.9, .9, .85), accel=(1.2, 1.1, 1.),
+             scale=(2.8, 3., 2.))
 # a dangle is a short pendulum: it settles faster than a lock of hair
-DANGLE_PHYSICS = dict(length=6., mobility=.95, delay=.5, accel=1.2, scale=9.)
+DANGLE_PHYSICS = dict(length=6., mobility=.95, delay=.85, accel=1.2, scale=3.)
 HEAD_INPUTS = [('ParamAngleX', 60, 'X'), ('ParamAngleZ', 100, 'Angle'), ('ParamBodyAngleZ', 40, 'Angle')]
 BODY_INPUTS = [('ParamBodyAngleX', 100, 'X'), ('ParamBodyAngleZ', 100, 'Angle')]
+# nodding: the hair lags and bounces up and down (ParamHairPitch). X type:
+# only while the head moves, no lasting offset. Cubism negates an input
+# unless reflected; Angle X and the swing point the same way on screen,
+# Angle Y and the pitch opposite ways, so this one is reflected
+PITCH_INPUTS = [('ParamAngleY', 70, 'X', True)]
+# a short, quick pendulum: a nod of 16 degrees bounces the hair two or three
+# times within half a second, at most 0.7-0.85 of the parameter's range
+PITCH_PHYSICS = dict(length=6., mobility=.9, delay=.9, accel=1.2, scale=3.)
 
 
 def _cfg(char):
@@ -105,8 +122,8 @@ def physics(char, params):
     def setting(pid, out, length, mobility, delay, accel, scale, inputs=HEAD_INPUTS):
         return {
             'Id': pid,
-            'Input': [{'Source': {'Target': 'Parameter', 'Id': i}, 'Weight': w, 'Type': t, 'Reflect': False}
-                      for i, w, t in inputs],
+            'Input': [{'Source': {'Target': 'Parameter', 'Id': i[0]}, 'Weight': i[1], 'Type': i[2],
+                       'Reflect': i[3] if len(i) > 3 else False} for i in inputs],
             'Output': [{'Destination': {'Target': 'Parameter', 'Id': out}, 'VertexIndex': 1,
                         'Scale': scale, 'Weight': 100, 'Type': 'Angle', 'Reflect': False}],
             'Vertices': [
@@ -116,9 +133,25 @@ def physics(char, params):
             'Normalization': {'Position': {'Minimum': -10, 'Default': 0, 'Maximum': 10},
                               'Angle': {'Minimum': -10, 'Default': 0, 'Maximum': 10}}}
 
+    def chain(pid, outs, c, inputs=HEAD_INPUTS):
+        s = setting(pid, outs[0], c['length'][0], c['mobility'][0], c['delay'][0], c['accel'][0], c['scale'][0], inputs)
+        y = c['length'][0]
+        for k in range(1, len(c['length'])):
+            y += c['length'][k]
+            s['Vertices'].append({'Position': {'X': 0, 'Y': y}, 'Mobility': c['mobility'][k], 'Delay': c['delay'][k],
+                                  'Acceleration': c['accel'][k], 'Radius': c['length'][k]})
+            if outs[k]:
+                s['Output'].append({'Destination': {'Target': 'Parameter', 'Id': outs[k]}, 'VertexIndex': k+1,
+                                    'Scale': c['scale'][k], 'Weight': 100, 'Type': 'Angle', 'Reflect': False})
+        return s
+
     sets = []
     for lock in char['hair']['locks'].values():
         if lock['param'] not in params:
+            continue
+        if lock.get('mid') in params:
+            c = {**CHAIN, **lock.get('chain', {})}
+            sets.append(chain(lock['param'].replace('Param', '', 1), [lock['param'], lock['mid'], lock.get('tip')], c))
             continue
         ph = {k: float(v) for k, v in {**PHYSICS, **lock.get('physics', {})}.items()}
         s = setting(lock['param'].replace('Param', '', 1), lock['param'], ph['length'], ph['mobility'],
@@ -132,6 +165,10 @@ def physics(char, params):
             s['Output'].append({'Destination': {'Target': 'Parameter', 'Id': lock['tip']}, 'VertexIndex': 2,
                                 'Scale': ph['tip_scale'], 'Weight': 100, 'Type': 'Angle', 'Reflect': False})
         sets.append(s)
+    if 'ParamHairPitch' in params and any(lk.get('pitch') for lk in char['hair']['locks'].values()):
+        ph = PITCH_PHYSICS
+        sets.append(setting('HairPitch', 'ParamHairPitch', ph['length'], ph['mobility'], ph['delay'],
+                            ph['accel'], ph['scale'], PITCH_INPUTS))
     for d in char.get('dangles', {}).values():
         if d['param'] not in params:
             continue

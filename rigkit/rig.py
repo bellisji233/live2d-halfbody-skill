@@ -81,6 +81,7 @@ class Rig:
         P += [(switch[nm], SWITCH_KEYS, 0.) for nm in poses.get('priority', [])]
         P += [('ParamBodyAngleX', [-10., 0., 10.], 0.), ('ParamBodyAngleY', [-10., 0., 10.], 0.)]
         P += [(lk['tip'], SIGNED, 0.) for lk in self.locks.values() if lk.get('tip')]
+        P += [(lk['mid'], SIGNED, 0.) for lk in self.locks.values() if lk.get('mid')]
         P.append(('ParamMouthForm', SIGNED, 0.))
         if c.get('cheek'):
             P.append((c['cheek']['param'], [0., 1.], 0.))
@@ -101,7 +102,7 @@ class Rig:
             own = ['ParamMouthOpenY', 'ParamMouthVariant', 'ParamMouthForm']
         elif L.role == 'hair' and L.lock:
             lk = self.locks[L.lock]
-            own = [lk['param']]+([lk['tip']] if lk.get('tip') else [])+['ParamHairPitch']
+            own = [lk['param']]+[lk[k] for k in ('tip', 'mid') if lk.get(k)]+['ParamHairPitch']
         elif L.role == 'cheek':
             own = [self.char['cheek']['param']]
         elif L.role == 'dangle':
@@ -153,8 +154,14 @@ class Rig:
     def _apply(self, L, vertices, p, visible):
         v = np.asarray(vertices, float)
         lock = self.locks.get(L.lock) if L.lock else None
-        if lock and lock.get('tip') and p.get(lock['tip'], 0):
-            v = self._tip(v, sample(self.ctx.hair_weights[L.lock], v), p[lock['tip']])
+        if lock and lock.get('mid'):
+            # three segments: the lower two thirds and the lowest third bend
+            # on their own, each a beat after the one above
+            for k, joint in (('tip', 2/3), ('mid', 1/3)):
+                if p.get(lock[k], 0):
+                    v = self._segment(L.lock, v, p[lock[k]], k, joint)
+        elif lock and lock.get('tip') and p.get(lock['tip'], 0):
+            v = self._tip(L.lock, v, p[lock['tip']])
         if L.role == 'mouth' and p.get('ParamMouthForm', 0):
             v = self._mouth_form(v, p['ParamMouthForm'])
         v, op = self._own(L, v, p, visible)
@@ -322,30 +329,67 @@ class Rig:
         return out
 
     # hair ----------------------------------------------------------------
+    def _lock_weight(self, lock, pts, dx):
+        """How far each point of a lock follows a sideways move dx. The face
+        anchor (hair.anchor_layer) holds the hair near the face. With
+        hair.anchor_one_way it holds it only against moving off the face:
+        what the hair covers there stays covered (the shadow the hair casts
+        on the cheek is painted on the face layer, and uncovered it stays
+        behind), while the lock moves onto the face freely;
+        hair.anchor_keep is the share of the free move kept moving off."""
+        h = self.char['hair']
+        pinned = sample(self.ctx.hair_weights[lock], pts)
+        if not h.get('anchor_one_way'):
+            return pinned
+        free = sample(self.ctx.hair_free[lock], pts)
+        off = dx*(pts[:, 0]-self.char['head']['face']['centre'][0]) > 0
+        return np.where(off, pinned+(free-pinned)*h.get('anchor_keep', 0.), free)
+
     def _swing(self, L, vertices, v, p):
         h = self.char['hair']
         lk = self.locks[L.lock]
-        w = sample(self.ctx.hair_weights[L.lock], vertices)
         swing = p.get(lk['param'], 0)
         bend_cfg = h['bend']
         phase = (vertices[:, 0]-bend_cfg['centre_x'])/bend_cfg['width']
         bend = 1+bend_cfg['amount']*np.sin(phase*np.pi)
+        w = self._lock_weight(L.lock, vertices, lk['swing']*swing*bend)
         v[:, 0] += lk['swing']*w*swing*bend
         side_lift, sag = h['lift']
         v[:, 1] += (side_lift*phase*swing+sag*swing*swing)*w
-        v[:, 1] += lk['pitch']*p.get('ParamHairPitch', 0)*w
+        # up and down the hair slides along the face: nothing comes uncovered
+        wp = sample(self.ctx.hair_free[L.lock] if h.get('anchor_one_way') else self.ctx.hair_weights[L.lock], vertices)
+        v[:, 1] += lk['pitch']*p.get('ParamHairPitch', 0)*wp
         return v
 
-    def _tip(self, v, w, tip):
+    def _tip(self, lock, v, tip):
         """The lower part of a lock bends on its own (second physics segment)."""
         h = self.char['hair']
         t = h['tips']
         s = smooth((v[:, 1]-t['from_y'])/t['span'])
-        wt = w*s
         phase = (v[:, 0]-h['bend']['centre_x'])/h['bend']['width']
+        wt = self._lock_weight(lock, v, t['amount']*tip*(1+h['bend']['amount']*np.sin(phase*np.pi)))*s
         out = v.copy()
         out[:, 0] += t['amount']*wt*tip*(1+h['bend']['amount']*np.sin(phase*np.pi))
         out[:, 1] -= t['lift']*tip*tip*wt
+        return out
+
+    def _segment(self, lock, v, value, k, joint):
+        """A lock in three segments: what hangs below the joint (a share of the
+        lock's length from its root) bends sideways by value; the bend grows
+        from the joint to the lock's end. hair.locks.<lock>.bend: px at the
+        end for the middle and the lowest segment."""
+        h = self.char['hair']
+        lk = self.locks[lock]
+        y0, length = lk['root']
+        j = y0+length*joint
+        s = smooth((v[:, 1]-j)/(y0+length-j))
+        amount = lk['bend'][0 if k == 'mid' else 1]
+        phase = (v[:, 0]-h['bend']['centre_x'])/h['bend']['width']
+        dx = amount*value*(1+h['bend']['amount']*np.sin(phase*np.pi))
+        wt = self._lock_weight(lock, v, dx)*s
+        out = v.copy()
+        out[:, 0] += dx*wt
+        out[:, 1] -= h['tips']['lift']*amount/max(h['tips']['amount'], 1e-6)*value*value*wt
         return out
 
     # head ----------------------------------------------------------------

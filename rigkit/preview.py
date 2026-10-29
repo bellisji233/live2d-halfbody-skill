@@ -139,6 +139,7 @@ def _interp(keys, t):
 
 def schedule(char, fps):
     tips = {lk['param']: lk.get('tip') for lk in char['hair']['locks'].values()}
+    mids = {lk['param']: lk.get('mid') for lk in char['hair']['locks'].values()}
     springs = {pid: SPRINGS.get(pid, (8.8, .54, 1.5)) for pid in tips}
     springs['ParamHairPitch'] = PITCH_SPRING
     for d in char.get('dangles', {}).values():
@@ -164,6 +165,9 @@ def schedule(char, fps):
             out[pid] = float(np.clip((.3*(s['x']-goal)+.7*(s['tip']-goal))*gain, -1, 1))
             if tips.get(pid):
                 out[tips[pid]] = float(np.clip((s['tip']-s['x'])*gain*1.6, -1, 1))
+            if mids.get(pid):
+                # the middle segment bends half as far, between the lock and its tip
+                out[mids[pid]] = float(np.clip((s['tip']-s['x'])*gain*.8, -1, 1))
         bx += (x/3-bx)*k; by += (y/3-by)*k
         blink = 1.
         for t0 in (13.6, 14.4):

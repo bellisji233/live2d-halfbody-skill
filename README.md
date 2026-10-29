@@ -14,7 +14,7 @@ Give an AI agent (such as Claude Code) one character illustration or a text desc
 
 - Head turns left/right and up/down (±30); the body leans when the head tilts; body follow and breathing
 - Blinking and winking, eye tracking, eyebrow movement, lip sync, smiling mouth corners
-- Hair physics in sections: bangs, side locks (root and tip swing separately), back hair or bun; twin tails each swing from the hair tie; long hair follows the body below the shoulders. Bangs are optional, and the side hair can be tucked behind the ears
+- Hair physics in sections: bangs, side locks, back hair or bun; side locks and long hair swing in three sections, each a beat behind the one above; hair bounces when nodding; twin tails each swing from the hair tie; long hair follows the body below the shoulders. Bangs are optional, and the side hair can be tucked behind the ears
 - Necklace pendant swings with the body; drop earrings swing from the earlobes
 - Glasses follow the face
 - Hotkeys: smiling eyes, O-shaped mouth, angry, troubled; wave, open hands and pointing gestures; blush
