@@ -25,6 +25,7 @@ class Layer:
     lock: str | None = None       # hair: the lock whose swing and weights it shares
     neck_hold: str = 'hold'       # hair: none | hold | behind_jaw
     warp: str | None = None       # deformer group under the body warp
+    copy_of: str | None = None    # a copy drawn over the front hair: moves as this layer
 
 
 class Character:
@@ -65,8 +66,8 @@ class Character:
         out = {}
         for nm in names:
             info = infer_role(nm, locks)
-            info.update(override.get(nm, {}))
-            group = info.pop('group', None) or groups.get(nm) or 'head'
+            info.update(override.get(info.get('copy_of', nm), {}))
+            group = info.pop('group', None) or groups.get(info.get('copy_of', nm)) or 'head'
             if info['role'] != 'dangle' and (info['role'] in ('body', 'pose') or group in ('body', 'pose')):
                 info['role'] = group
             layer = Layer(name=nm, group=group, **info)
@@ -78,12 +79,25 @@ class Character:
         return out
 
 
+THROUGH = '_Through'
+
+
+def through_name(name):
+    """Brow_Neutral_L -> Brow_Neutral_Through_L."""
+    side = _side(name)
+    return name[:-2]+THROUGH+name[-2:] if side else name+THROUGH
+
+
 def _side(name):
     return name[-1] if name[-2:] in ('_L', '_R') else None
 
 
 def infer_role(name, locks):
     """Role from the standard layer names (see the skill's layer list)."""
+    if THROUGH in name:
+        # Brow_Neutral_Through_L: Brow_Neutral_L again, over the front hair
+        original = name.replace(THROUGH, '')
+        return dict(infer_role(original, locks), copy_of=original)
     side = _side(name)
     eye = {'Eye_Open_': 'eye_lash', 'Eye_White_': 'eye_white', 'Eye_Crease_': 'eye_crease',
            'Iris_': 'iris', 'Eye_Lower_': 'eye_lower', 'Eye_Closed_': 'eye_closed',

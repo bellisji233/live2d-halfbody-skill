@@ -1,7 +1,7 @@
 """用 Core 求值 + numpy 光栅化，把 moc3 渲染成 PNG。
 
 不需要 Cubism SDK：几何来自原生 Core，三角形自己画。
-支持剪贴蒙版（把蒙版网格画进 alpha 缓冲再相乘）。
+支持剪贴蒙版（蒙版网格画进 alpha 缓冲，几个蒙版取并集，和 Cubism 一样）。
 """
 from __future__ import annotations
 import json, argparse
@@ -115,12 +115,16 @@ def render(model_dir: str | Path, manifest: str, params: dict | None = None,
         layer = np.zeros((y1 - y0, x1 - x0, 4), np.float32)
         off = np.array([x0, y0], np.float32)
         _raster(layer, P - off, UV, g["triangles"][d_i], texs[g["texture_indices"][d_i]], 1.0)
+        cover = None
         for mi in g["masks"][d_i]:
             mp = to_px(g["positions"][mi])
             mbuf = np.zeros_like(layer)
             _raster(mbuf, mp - off, g["uvs"][mi], g["triangles"][mi],
                     texs[g["texture_indices"][mi]], 1.0, alpha_only=True)
-            layer *= mbuf[..., 3:4]
+            m = mbuf[..., 3:4]
+            cover = m if cover is None else cover + m - cover * m
+        if cover is not None:
+            layer *= cover
         if op < 1.0:
             layer *= op
         sub = canvas[y0:y1, x0:x1]

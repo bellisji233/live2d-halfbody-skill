@@ -28,7 +28,7 @@ The output is a model file VTube Studio loads directly (.moc3), not a Cubism Edi
 The agent redraws your illustration or description into a version that separates cleanly into layers, and you approve it before the next step. The face, hair color, eyes, clothing, palette and art style stay the same; these are adjusted:
 
 - **Framing**: front-facing half body from the top of the head to the waist, plain white background; arms hang at the sides with a gap from the body, hands empty. The three gestures are edited from this pose.
-- **Bangs**: optional. With bangs, a straight-cut fringe ending above the eyebrows, both eyebrows fully visible so they can move; without, the whole forehead shows.
+- **Bangs**: optional. With bangs, a straight-cut fringe ending above the eyebrows, both eyebrows fully visible; where the bangs do cover an eyebrow, it shows through them, half transparent. Without, the whole forehead shows.
 - **Side hair**: either one smooth section on each side of the face, covering the ear and ending at the chin, swinging on its own when the head turns; or tucked behind the ears, which stay visible.
 - **Long hair**: hangs behind the neck, shoulders and back, showing only beside the neck and outside the arms; not over the shoulders, chest or arms.
 - **Twin tails**: tied above and behind the ears, hanging behind the shoulders.

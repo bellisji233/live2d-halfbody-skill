@@ -19,6 +19,11 @@ Meshes by role:
       a regular grid;
   body and arm poses
       a grid every BODY_CELL px, so the body warp can bend them.
+
+A brow the front hair covers (at rest or at any brow form) gets a copy
+just above the highest hair layer that covers it, clipped by those hair
+layers: it shows only where the hair is, moving with the brow (see
+through_layers). The copy shares the brow's place in the atlas.
 """
 from __future__ import annotations
 from pathlib import Path
@@ -27,13 +32,15 @@ import numpy as np
 import cv2
 from PIL import Image
 
-from .config import Character
+from .config import Character, through_name
 from .context import Context
+from .rig import Rig
 
 ATLAS = 4096
 PAD = 4            # px around each piece in the atlas (bilinear and mipmap bleed)
 MARGIN = 3         # px of transparent margin kept around a layer's pixels
 BODY_CELL = 24.    # px
+THROUGH_MIN = 20   # px of a brow under a hair layer, at any brow form, for that layer to clip a copy
 
 
 def dilate_color(rgba):
@@ -60,7 +67,7 @@ def pack(entries):
     atlas = np.zeros((ATLAS, ATLAS, 4), np.uint8)
     x = y = shelf = 0
     placed = {}
-    for e in sorted(entries, key=lambda e: -e['rgba'].shape[0]):
+    for e in sorted([e for e in entries if not e.get('copy_of')], key=lambda e: -e['rgba'].shape[0]):
         h, w = e['rgba'].shape[:2]
         if x+w+2*PAD > ATLAS:
             x = 0; y += shelf+2*PAD; shelf = 0
@@ -121,13 +128,48 @@ def lattice_mesh(lattice, crop):
     return np.asarray(vertices), np.asarray(triangles)
 
 
+def through_layers(char, layers, log):
+    """layers with a copy of each brow the front hair covers, just above the
+    highest hair layer covering it; the copy's masks are those hair layers."""
+    rig = Rig(char, [l['name'] for l in layers])
+    if rig.through_opacity() <= 0:
+        return layers
+    W, H = char.canvas
+    alpha = lambda l: np.asarray(Image.open(char.art/l['texture']).convert('RGBA'))[:, :, 3]
+    out = list(layers)
+    for i, b in enumerate(layers):
+        L = rig.layers[b['name']]
+        if L.role != 'brow' or not b.get('visible', True):
+            continue
+        ys, xs = np.nonzero(alpha(b) > 128)
+        if not len(xs):
+            continue
+        pixels = np.stack([xs, ys], 1)+.5
+        at = [np.floor(rig.apply(b['name'], pixels, {'ParamBrowForm': f})[0]).astype(int)
+              for f in rig.keys['ParamBrowForm']]
+        masks = []
+        for h in layers[i+1:]:
+            if rig.layers[h['name']].role != 'hair':
+                continue
+            hair = alpha(h) > 128
+            under = max(int(hair[q[ok, 1], q[ok, 0]].sum()) for q in at
+                        for ok in [(q[:, 0] >= 0) & (q[:, 0] < W) & (q[:, 1] >= 0) & (q[:, 1] < H)])
+            if under >= THROUGH_MIN:
+                masks.append(h['name'])
+        if masks:
+            top = max(k for k, l in enumerate(out) if l['name'] in masks)
+            out.insert(top+1, dict(b, name=through_name(b['name']), masks=masks, copy_of=b['name']))
+            log(f'{b["name"]}: shows through {", ".join(masks)} at {rig.through_opacity():.0%}')
+    return out
+
+
 def prepare(char_path, out=None, log=print):
     char = Character(char_path)
     out = Path(out) if out else char.prepared
     out.mkdir(parents=True, exist_ok=True)
     W, H = char.canvas
     ctx = Context(char)
-    layers = list(char.layout['layers'])
+    layers = through_layers(char, list(char.layout['layers']), log)
     names = [l['name'] for l in layers]
     for side in 'LR':
         if f'Eye_White_{side}' in names:
@@ -165,14 +207,17 @@ def prepare(char_path, out=None, log=print):
             nx, ny = {'brow': (9, 4), 'eye_white': (13, 11), 'iris': (13, 11), 'eye_lower': (13, 11)}.get(L.role, (9, 7))
             verts, tris = grid(w, h, nx, ny)
         entries.append(dict(name=l['name'], index=i, rgba=crop, verts=verts, tris=np.asarray(tris),
-                            crop=(x0, y0, x1, y1), visible=l.get('visible', True)))
+                            crop=(x0, y0, x1, y1), visible=l.get('visible', True),
+                            copy_of=l.get('copy_of'), masks=l.get('masks')))
     atlas, placed = pack(entries)
     meshes = []
     for k, e in enumerate(entries):
-        ax, ay = placed[e['name']]; x0, y0, x1, y1 = e['crop']; v = e['verts']
+        ax, ay = placed[e['copy_of'] or e['name']]; x0, y0, x1, y1 = e['crop']; v = e['verts']
         meshes.append(dict(name=e['name'], draw_order=k, visible=e['visible'],
                            vertices=(v+[x0+.5, y0+.5]).tolist(), uvs=((v+[ax+.5, ay+.5])/ATLAS).tolist(),
                            triangles=e['tris'].tolist(), crop=list(e['crop'])))
+        if e['masks']:
+            meshes[-1]['masks'] = e['masks']
     (out/'meshes.json').write_text(json.dumps(dict(canvas=[W, H], atlas=ATLAS, meshes=meshes)))
     Image.fromarray(atlas).save(out/'texture_00.png')
     log(f'{len(meshes)} drawables -> {out}')

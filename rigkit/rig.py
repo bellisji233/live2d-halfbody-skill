@@ -32,6 +32,9 @@ def mouth_open_keys(start=0.):
 LEGACY_POSE_KEYS = [0., .49, .5, 1.49, 1.5, 2.49, 2.5, 3.]
 SWITCH_KEYS = [0., .49, .5, 1.]   # two keys around .5: no crossfade between poses
 SIGNED = [-1., 0., 1.]
+# a brow under the front hair shows through it at this share of its opacity
+# (brows.through_bangs; 0: hidden as before)
+THROUGH_BANGS = .4
 
 
 def _rotate(v, deg, pivot):
@@ -85,6 +88,8 @@ class Rig:
         return P
 
     def _axes(self, L):
+        if L.copy_of:
+            return self._axes(self.layers[L.copy_of])
         own = []
         if L.role.startswith(('eye', 'iris')):
             own = ['ParamEye'+L.side+'Open', 'ParamEyeSmile']
@@ -123,8 +128,14 @@ class Rig:
         return {nm for nm, L in self.layers.items() if L.role == 'hair' and L.lock}
 
     # ---------------------------------------------------------------- motion
+    def through_opacity(self):
+        return float(self.char['brows'].get('through_bangs', THROUGH_BANGS))
+
     def apply(self, name, vertices, p, visible=True):
         L = self.layers[name]
+        if L.copy_of:
+            pts, op = self.apply(L.copy_of, vertices, p, visible)
+            return pts, op*self.through_opacity()
         p = {**self.default, **p}
         if L.role == 'hair':
             moved, op = self._apply(L, self.ctx.lattice.points, p, visible)

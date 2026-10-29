@@ -365,9 +365,10 @@ def write(rig, meshes, out: Path, name: str, canvas, log=print):
     for ax in band_axes:
         bb.append(len(slot)); slot.extend(ax)
     mask_idx, mask_begin, mask_count = [], [], []
-    for nm in names:
+    for mm in meshes:
+        nm = mm['name']
         mask_begin.append(len(mask_idx))
-        srcs = [names.index(s) for s in rig.masks.get(nm, []) if s in names]
+        srcs = [names.index(s) for s in rig.masks.get(nm, [])+mm.get('masks', []) if s in names]
         mask_idx.extend(srcs); mask_count.append(len(srcs))
     keys, key_off = [], []
     for _, vals, _ in PARAMS:
