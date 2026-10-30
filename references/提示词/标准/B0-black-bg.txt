@@ -1,8 +1,0 @@
-Use case: precise-object-edit. Output one square image at the largest square size available.
-
-Registration: this is a LAYER VARIANT of the attached base image, not a new illustration. Identical camera, identical crop, identical character scale, identical pixel position. The head, the hair silhouette, the shoulders and the torso must land on exactly the same pixels as the base. Do not re-frame, do not zoom, do not recentre, do not change the pose or the head angle, do not redraw anything that is not part of the change.
-
-Change exactly ONE thing: the BACKGROUND. Every pixel of the plain white background becomes flat solid pure black #000000, including the small gaps between hair strands, between the hair tips and the collar and between the arms and the body.
-The character itself is left untouched pixel for pixel. Every white or near-white part of the character stays exactly as it is: white clothing, collars and accessories, the highlights in the eyes and in the hair. Do not add any outline, glow, rim light or dark fringe around the character; the edge of the character keeps exactly the same thin soft line as in the base.
-
-Rendering: keep every pixel of the character identical to the base: same colours, same linework, same shading. Flat solid pure black #000000 background, no gradient, no texture, no vignette. No text, no watermark, no border, no signature.

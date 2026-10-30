@@ -36,14 +36,14 @@ LABEL_ORDER = ['hat', 'bang', 'side', 'face', 'body', 'neck', 'tail', 'hair']
 # which image each variant edits; anything not listed edits the base
 BASES = {'V2-side-off': 'V1-hat-off', 'V3-bangs-off': 'V2-side-off', 'V4-skin-mask': 'V3-bangs-off',
          'V5-blank-face': 'V3-bangs-off', 'D7-brows-angry': 'V3-bangs-off', 'D8-brows-troubled': 'V3-bangs-off',
-         'V7-ears-clear': 'V3-bangs-off', 'V8-head-off': 'V3-bangs-off',
+         'V8-head-off': 'V3-bangs-off',
          'F1-blush': 'R0-rest', 'P1-wave': 'R0-rest', 'P2-explain': 'R0-rest', 'P3-point': 'R0-rest'}
 # steps a character without a hat, side locks or bangs leaves out; the variants
 # that would edit one edit the step before it (no bangs: V4 edits V2)
 SKIPPABLE = ('V1-hat-off', 'V2-side-off', 'V3-bangs-off')
 ORDER = ['S1-segment', 'V1-hat-off', 'V2-side-off', 'V3-bangs-off', 'V4-skin-mask', 'V5-blank-face', 'V6-no-iris',
          'D1-mouth-open', 'D2-mouth-o', 'D3-mouth-line', 'D4-mouth-frown', 'D5-eyes-closed', 'D6-eyes-smile',
-         'D7-brows-angry', 'D8-brows-troubled', 'B0-black-bg', 'V7-ears-clear', 'V8-head-off', 'V9-dangles-off']
+         'D7-brows-angry', 'D8-brows-troubled', 'V8-head-off', 'V9-dangles-off']
 REQUIRED = ['S1-segment', 'V4-skin-mask', 'V5-blank-face', 'V6-no-iris',
             'D1-mouth-open', 'D5-eyes-closed']
 MOUTHS = {'Open': 'D1-mouth-open', 'O': 'D2-mouth-o', 'Line': 'D3-mouth-line', 'Frown': 'D4-mouth-frown'}
@@ -128,21 +128,6 @@ def figure_alpha(rgb, tol=8, keep=None, fixed=False, page=None):
         a = np.where(white_thing | (den < 40.**2), plain, a)
         alpha[band] = np.minimum(alpha[band], a[band])
     return alpha.astype(np.float32)
-
-
-def two_background_alpha(white, black, alpha, reach=6):
-    """The same picture on white and on black: at an edge pixel
-    white - black = (1-a)*white, so its transparency is measured instead of
-    guessed from colours (pale hair against white paper). Used within reach
-    of the page found on the white picture only: inside the figure the edit
-    re-renders a few spots (an eye corner), and image-model noise is about
-    +-10, so values close to 0 or 1 snap."""
-    a2 = 1-np.median(white-black, axis=2)/WHITE
-    a2 = np.where(a2 > .85, 1., np.where(a2 < .06, 0., a2))
-    near = dilate(alpha < .5, reach) & dilate(alpha >= .5, reach)      # the figure's edge only
-    out = alpha.copy()
-    out[near] = np.clip(a2[near], 0, 1)
-    return out.astype(np.float32)
 
 
 def align(img, ref):
@@ -741,10 +726,6 @@ def plan(art, out, pad_top=0, hat='Hat', log=print):
     keys = [k for k in LABEL_ORDER if k != 'tail' or twin_tails(s1)]
     painted = np.stack([np.abs(s1-np.float32(PALETTE[k])).max(2) for k in keys], 2).min(2) < 110
     fig_a = figure_alpha(B, keep=erode(painted, 3))
-    if have('B0-black-bg'):
-        K = V('B0-black-bg').copy()
-        K[:pad_top] = 0                                                  # the added rows are its page too
-        fig_a = two_background_alpha(B, K, fig_a)
     fig = fig_a > .5
     S = label_map(s1, fig, keys)
     if 'tail' in S:
@@ -963,24 +944,6 @@ def plan(art, out, pad_top=0, hat='Hat', log=print):
     # shadow left on it would show above the closed eye
     marks |= np.logical_or.reduce([dilate(feats['eye_'+s]['mask'], 4) for s in 'LR']) & ~dilate(above, 3)
     face_rgb = v5
-    if have('V7-ears-clear') and have('V8-head-off'):
-        # ears: v7 draws them whole (no strands over the top). Around where
-        # it differs from v3, the skin-hued pixels beside the face are ear,
-        # with the dark outline next to them
-        v7 = V('V7-ears-clear')
-        # (large changes only: the edit re-renders a few px here and there)
-        cleared = dilate(keep_large(np.abs(v7-v3).max(2) > 25, 400), 15)
-        ear = cleared & dilate(face_m, 20) & ~face_m & (figure_alpha(v7) > .5)
-        ear &= hue_distance(v7, face_m, 10) < hue_distance(v7, hair_u & ~face_m, 10)
-        ear |= dilate(ear | face_m, 2) & cleared & (lum(v7) < 150) & ~face_m
-        ear = fill_holes(ear | face_m, 400) & ~face_m
-        ear &= dilate(erode(ear | face_m, 2), 3)                  # a loose strand beside it is thin
-        ear &= ~dilate(featured, 4)                                 # an eye corner is not ear
-        ear = np.logical_or.reduce([c for c in components(ear, 30) if (dilate(c, 2) & face_m).any()] or [np.zeros(fig.shape, bool)])
-        # (around the ear only: the eye corner stays blank skin)
-        face_rgb = np.where((ear | (dilate(ear, 25) & face_m & ~featured))[..., None], v7, v5)
-        face_m |= ear
-        log(f'  耳朵补全：{int(ear.sum())} px')
     stack.add('Face_Skin', 'head', face_rgb, soft(face_m), keep=marks)
 
     # body: everything that is not head or neck

@@ -1,8 +1,0 @@
-Use case: precise-object-edit. Output one square image at the largest square size available.
-
-Registration: this is a LAYER VARIANT of the attached base image, not a new illustration. Identical camera, identical crop, identical character scale, identical pixel position. The head, the hair silhouette, the shoulders and the torso must land on exactly the same pixels as the base. Do not re-frame, do not zoom, do not recentre, do not change the pose or the head angle, do not redraw anything that is not part of the change.
-
-Change exactly ONE thing: remove the strands of hair that lie over or touch the two EARS, so that both ears are completely visible from the top of the rim down to the earlobe. Where those strands were, paint the ears complete: outer rim, inner ear shapes and earlobe, same skin colour, same line style and line weight as the rest of the ear and the face. Around the ears, the back hair continues behind them with the same colour, strand direction and shading, but no hair crosses in front of any part of an ear.
-Everything else is identical to the base: the face, both eyes, eyebrows, nose, mouth, blush, the rest of the hair, neck, clothing, arms and background.
-
-Rendering: match the base exactly: same clean cel shading, same crisp thin linework and line weight, same colours. Flat even frontal lighting, NO cast shadows, no paper grain, no canvas texture, no glow. Plain pure white background. No text, no watermark, no border, no signature.

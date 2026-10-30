@@ -48,7 +48,7 @@ import numpy as np
 import cv2
 from PIL import Image
 
-from .split import (Stack, load, components, _u8, dilate, erode, keep_large, fill_holes, hue_distance, rest_image, sheet,
+from .split import (Stack, load, components, _u8, dilate, erode, keep_large, fill_holes, rest_image, sheet,
                     figure_alpha, lum, align, colour_fit, apply_colour_fit, twin_tails, PALETTE)
 
 ST_PARTS = {                      # our layer -> See-through layers, bottom first
@@ -241,6 +241,52 @@ def st_shapes(S, R, H, W, over_locks=None, parts=ST_PARTS, topwear_back=None):
     return shapes, fshapes
 
 
+def fill_colour(colour, a, covers, src, take, ref):
+    """A layer's colour from src where take, src shifted to meet ref where
+    the layer shows (a: its alpha, covers: what lies over it at rest)."""
+    known = erode((covers < .02) & (a > .98), 2) & (np.abs(ref-src).max(2) < 60)
+    src = src+offset_field(np.clip(ref-src, -90, 90), known)
+    w = cv2.GaussianBlur(take.astype(np.float32), (0, 0), 2.)[..., None]
+    return w*src+(1-w)*colour
+
+
+# The back hair keeps See-through's own drawing where it is hidden at rest
+# (under the side hair, the tails, the face). Filled from a variant (V8 head
+# off, V2 side hair off) it showed: the variant draws the back hair lighter
+# than See-through, and what is replaced is exactly what lies over it, so a
+# swinging lock left a light patch of its own shape behind; the colours,
+# matched from scattered points, came out in blotches. See-through's hidden
+# back hair is plainer but continues what shows around it.
+def restore_back(art, layers, st=None, log=print):
+    """A folder split while the back hair was still filled from variants:
+    Hair_Back's colour back to See-through's where See-through drew back
+    hair and the layer is hidden at rest. st: the See-through folder it was
+    split from (default ART/seethrough)."""
+    art, layers = Path(art), Path(layers)
+    st = Path(st) if st else art/'seethrough'
+    meta = json.loads((layers/'split.json').read_text())
+    lay = json.loads((layers/'layout.json').read_text())['layers']
+    part = lambda n: np.asarray(Image.open(layers/'parts'/f'{n}.png').convert('RGBA')).astype(np.float32)
+    back = part('Hair_Back')
+    H, W = back.shape[:2]
+    rgb, a = st_layer(st, 'back hair', (W, H-meta['pad_top']), meta['pad_top'])
+    names = [l['name'] for l in lay]
+    cover = np.zeros((H, W), np.float32)
+    for l in lay[names.index('Hair_Back')+1:]:
+        if l['visible']:
+            x = part(l['name'])[..., 3]/255
+            cover = x+(1-x)*cover
+    seen = (cover < .02) & (back[..., 3] > 250) & (a > .98)
+    off = np.abs(back[..., :3]-rgb).max(2)[seen]
+    if off.size and np.median(off) > 2:
+        return log(f'  {st} 不是这个文件夹拆的（露出的后发中位差 {np.median(off):.0f}），没有改')
+    w = np.clip((a-.5)/.3, 0, 1)*np.clip((cover-.02)/.3, 0, 1)
+    out = w[..., None]*rgb+(1-w[..., None])*back[..., :3]
+    log(f'  Hair_Back：{int((np.abs(out-back[..., :3]).max(2) > 8).sum())} px 改回 See-through 原样')
+    back[..., :3] = out
+    Image.fromarray(np.round(np.clip(back, 0, 255)).astype(np.uint8)).save(layers/'parts'/'Hair_Back.png')
+
+
 def expression_lashes(art, B, R, pad_top, log=print):
     """Our closed and smiling eyes from See-through's lash layer of D5 / D6,
     for each variant See-through has been run on. Shifted and recoloured as
@@ -282,8 +328,12 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
     """See-through's layers as it draws them, colour included: nothing of the
     art is fitted into them, so no part carries a pixel of its neighbour. Ours
     only where See-through has nothing (expressions, unless it has been run on
-    the variant: expression_lashes; the closed mouth and nose too, which it draws poorly) and where its hidden fill is poor (the forehead under the fringe: V5;
-    the inside of the back hair: V8), shifted to meet its colours."""
+    the variant: expression_lashes; the closed mouth and nose too, which it draws poorly), where it leaves
+    a hidden part out (the back hair under the hat and the locks, the clothes
+    behind a dangle) and where it paints the shadow of what lies above into it
+    (the forehead under the fringe: V5), shifted to meet its colours. Hidden
+    parts it does draw are its own: the back hair (see restore_back), a lock
+    under another."""
     art, base_layers, out = Path(art), Path(base_layers), Path(out)
     st = art/'seethrough'
     B = load(art/'A0-base.png', pad_top)
@@ -434,31 +484,13 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
             shapes[n] = (shapes[n][0], np.maximum(shapes[n][1], a).astype(np.float32))
 
     def fill(n, src, take, ref):
-        """src where take, shifted to meet ref where the layer shows."""
-        a = shapes[n][1]
-        known = erode((covers[n] < .02) & (a > .98), 2) & (np.abs(ref-src).max(2) < 60)
-        src = src+offset_field(np.clip(ref-src, -90, 90), known)
-        w = cv2.GaussianBlur(take.astype(np.float32), (0, 0), 2.)[..., None]
-        colour[n] = w*src+(1-w)*colour[n]
+        colour[n] = fill_colour(colour[n], shapes[n][1], covers[n], src, take, ref)
 
     if (art/'V5-blank-face.png').exists():
         hidden = (covers['Face_Skin'] > .5) & (S['face'][1] > .02)
         fill('Face_Skin', load(art/'V5-blank-face.png', pad_top), erode(hidden, 2), S['face'][0])
-    if (art/'V8-head-off.png').exists():
-        v8 = load(art/'V8-head-off.png', pad_top)
-        hair_seen = (covers['Hair_Back'] < .02) & (shapes['Hair_Back'][1] > .98)
-        body_seen = (covers['Body'] < .02) & (shapes['Body'][1] > .98)
-        hairlike = hue_distance(v8, hair_seen) < hue_distance(v8, body_seen)
-        hairlike = fill_holes(keep_large(hairlike & (shapes['Hair_Back'][1] > .02), 400), 400)
-        hairlike &= erode(figure_alpha(v8) > .5, 2) & (covers['Hair_Back'] > .5)
-        # under the clothes V8 is the art where the edit left it: a sleeve's
-        # outline there would go into the hair behind the sleeve. Redrawn means
-        # changed over an area (the head); every outline differs a little
-        redrawn = cv2.morphologyEx(_u8(np.abs(v8-B).max(2) > 40), cv2.MORPH_OPEN, np.ones((7, 7), np.uint8)) > 0
-        hairlike &= ~((shapes['Body'][1] > .5) & ~dilate(redrawn, 8))
-        fill('Hair_Back', v8, hairlike, S['back hair'][0])
-    for n in [n for n in LOCKS if n in R]:              # a lock under another: our split's drawing
-        fill(n, R[n][0], (covers[n] > .5) & (R[n][1] > .5), S['front hair'][0])
+    # a lock under another (or the hat) keeps See-through's front hair there:
+    # our split's drawing, recoloured to it, looked no different
     for n in [n for n in order if n.startswith('Dangle_') and R[n][1].max() > .1]:
         # See-through draws the dangle on the clothes: under ours, the clothes
         # behind it from our split (V9), so it does not show twice when it swings
@@ -848,11 +880,15 @@ def main():
     f.add_argument('--res', type=int, default=None); f.add_argument('--seed', type=int, default=42)
     f.add_argument('--site', choices=['auto', 'hf', 'modelscope', 'local'], default='auto')
     f.add_argument('--head-from', default=None, help='local: a See-through folder of the image this one is a variant of; head pass only')
+    b = sub.add_parser('restore-back', help="back hair to See-through's own drawing, on a folder split before")
+    b.add_argument('art'); b.add_argument('layers'); b.add_argument('--seethrough', default=None)
     p = sub.add_parser('split'); p.add_argument('art'); p.add_argument('base'); p.add_argument('out')
     p.add_argument('--pad-top', type=int, default=0)
     a = ap.parse_args()
     if a.cmd == 'fetch':
         fetch(a.image, a.out, a.res, a.seed, a.site, a.head_from)
+    elif a.cmd == 'restore-back':
+        restore_back(a.art, a.layers, a.seethrough)
     else:
         plan_as_drawn(a.art, a.base, a.out, a.pad_top)
 
