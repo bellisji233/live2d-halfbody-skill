@@ -12,14 +12,21 @@ Writes CHARACTER_DIR/素材检查/ with a report (报告.md) and images:
              no layer carries, or extra lines, show up as differences
   夹带       layers with pieces far away from their main body (a brow
              carrying a hair strand, a cheek carrying the jaw line)
+  透出背景   gaps a white page hides: the art has the figure (not page
+             white) where no layer covers it at rest, and white clothes
+             gone in a gesture; with the stack at rest and in each gesture
+             on a cyan page (青底.png)
 """
 from __future__ import annotations
-import sys
+import sys, json
 import numpy as np
 import cv2
 from PIL import Image, ImageFont
 
 from .config import Character
+from .split import load, align, art_figure, figure_alpha
+
+CYAN = (78, 205, 235)                   # a VTS-like page: white clothes and pale skin show their gaps
 
 REQUIRED = ['Face_Skin', 'Neck', 'Hair_Back',
             'Eye_White_L', 'Eye_White_R', 'Iris_L', 'Iris_R', 'Eye_Open_L', 'Eye_Open_R',
@@ -139,6 +146,48 @@ def check(char_path):
     else:
         report.append('未设置原画（character.json 的 reference），跳过。')
     report.append('')
+
+    # ---- 透出背景 ----
+    report += ['## 透出背景', '']
+    groups = {l['name']: l['group'] for l in layers}
+    poses = [n for n in names if groups.get(n) == 'pose']
+    stacks = [('静止', visible)]+[(n.replace('Pose_', ''), [m for m in names if m == n or (
+        m in visible and groups.get(m) not in ('body', 'pose'))]) for n in poses]
+    tiles = []
+    for label, stack in stacks:
+        im = Image.alpha_composite(Image.new('RGBA', (W, H), CYAN+(255,)), _stack(rgba, stack)).convert('RGB')
+        tiles.append((label, im.resize((W*480//H, 480))))
+    sheet_im = Image.new('RGB', (sum(t[1].size[0] for t in tiles), 480), 'white')
+    x = 0
+    for _, im in tiles:
+        sheet_im.paste(im, (x, 0))
+        x += im.size[0]
+    sheet_im.save(out/'青底.png')
+    rows = []
+    src, meta = char.art.parent, char.art/'split.json'
+    if (src/'A0-base.png').exists() and meta.exists():
+        pad = json.loads(meta.read_text()).get('pad_top', 0)
+        B = load(src/'A0-base.png', pad)
+        s1 = src/'S1-segment.png'
+        fig = art_figure(B, align(load(s1, pad), B)[0])[0] if s1.exists() else figure_alpha(B)
+        if fig.shape == rest.shape:
+            paper = (B.min(2) > 240) & (np.ptp(B, 2) < 8)
+            # not on or next to page white (the soft rim of a gap between strands)
+            near_paper = cv2.dilate(paper.astype(np.uint8), np.ones((7, 7), np.uint8)) > 0
+            hole = cv2.morphologyEx(((fig > .5) & (rest < .5) & ~near_paper).astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+            # what runs off the bottom of the canvas (hands cut by the frame) is out of the picture
+            n_, lab, st, _ = cv2.connectedComponentsWithStats(hole)
+            hole = np.isin(lab, [i for i in range(1, n_) if st[i, 1]+st[i, 3] < H-4 and st[i, 4] >= 50])
+            if hole.sum() > 20:
+                rows.append(f'- 静止：原画有、图层没盖住 {int(hole.sum())} 像素')
+    base_rgb = np.asarray(_stack(rgba, visible).convert('RGB')).astype(int)
+    white = (rest > .5) & (base_rgb.min(2) > 235)
+    for label, stack in stacks[1:]:
+        gone = cv2.morphologyEx((white & (_over([A[n] for n in stack]) < .5)).astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)) > 0
+        if gone.sum() > 20:
+            rows.append(f'- {label}：静止时白色、手势时透明 {int(gone.sum())} 像素（手臂挪开的地方除外，其余是缺口）')
+    report += rows or ['- 无']
+    report += ['', '`青底.png`：静止和各手势放在青色背景上，白衣服、浅色皮肤处的缺口在白底上看不出。', '']
 
     # ---- 夹带 ----
     report += ['## 夹带', '']

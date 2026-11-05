@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 import argparse, json, os
 import numpy as np
+import cv2
 from PIL import Image, ImageDraw, ImageFont
 
 REF_FACE_W, REF_FACE_H = 335., 384.
@@ -31,6 +32,16 @@ def _alpha(art, layout, name):
 def _bbox(a, thr=0):
     ys, xs = np.where(a > thr)
     return np.array([xs.min(), ys.min(), xs.max(), ys.max()], float) if len(xs) else None
+
+
+def _solid_bbox(a, near=15):
+    """Bounding box of a layer without the haze See-through leaves round a
+    part: pixels of a few % alpha out to the canvas corner, far from it."""
+    core = a > a.max()*.5
+    if not core.any():
+        return _bbox(a)
+    keep = cv2.dilate(core.astype(np.uint8), np.ones((2*near+1, 2*near+1), np.uint8)) > 0
+    return _bbox(np.where(keep, a, 0))
 
 
 def _ink_centre(art, layout, name):
@@ -141,7 +152,11 @@ def estimate(art: Path, name: str):
         if 'Side' in nm:
             three(lock, param)
         locks[nm] = lock
-    b = B('Hair_Back', 0)
+    # how long the back hair is (how far down its swing spreads, whether it is
+    # long hair) is measured on the hair, not on the haze: with it a bob
+    # reached the canvas bottom, and the hair that shows hardly swung
+    back = _solid_bbox(A('Hair_Back')) if 'Hair_Back' in names else None
+    b = back
     if b is not None and b[3] > chin:
         # the back hair hangs below the jaw: its ends swing behind the side hair
         y0 = round(float(face[1]+face[3])/2)
@@ -177,7 +192,7 @@ def estimate(art: Path, name: str):
     neck_y = chin+.22*fh
     shoulder_y = neck_y+.21*fh
     waist_y = float(belt[3]-8) if belt is not None else float(min(H-40, shoulder_y+1.1*fh))
-    if 'Hair_Back' in locks and B('Hair_Back', 0)[3] > shoulder_y+.3*fh:
+    if 'Hair_Back' in locks and back[3] > shoulder_y+.3*fh:
         # long hair: the head carries it at the jaw, the body from below the shoulders
         locks['Hair_Back']['body_from'] = [round(float(chin)), round(float(shoulder_y+.2*fh-chin))]
     radius = round(float((bb[:, 2].max()-bb[:, 0].min())/2*.78)) if len(bb) else round(.78*fw)

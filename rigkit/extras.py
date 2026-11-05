@@ -28,7 +28,7 @@ import numpy as np
 import cv2
 from PIL import Image, ImageDraw, ImageFont
 
-from .split import WHITE, load, align, match_colours, figure_alpha, dilate, erode, keep_large, fill_holes, nearest_fill, components
+from .split import WHITE, load, align, match_colours, figure_alpha, dilate, erode, disk, keep_large, fill_holes, nearest_fill, components
 
 REST = 'R0-rest'
 POSES = {'P1-wave': 'Pose_Wave', 'P2-explain': 'Pose_Explain', 'P3-point': 'Pose_Point'}
@@ -80,19 +80,34 @@ def edit(path, rest, pad_top):
     return v, float(np.hypot(*shift))
 
 
-def pose_layer(v, rest, figure, body, allowed, reach=None, hair_holes=None):
+def pose_layer(v, rest, figure, body, allowed, reach=None, hair_holes=None, hair=None, now=None):
     """The body where the edit did not change it, the edit where it did: a
     colour change, or the figure moving over the page (a pale palm is close
     to the page's white). reach: where else the arm may go (over long hair
     behind the body); a change there counts only where it carries on from
-    the change inside allowed."""
+    the change inside allowed. now: the layers as they are, where they
+    changed since the edit was made from rest."""
     d = cv2.GaussianBlur(np.abs(v-rest).max(2), (0, 0), 3)        # line jitter averages out, a redrawn arm does not
+    if now is not None:
+        # an edit made from an older rest either keeps the old drawing there or
+        # redraws it like the layers now, give or take a few px (a gap in the
+        # collar, painted over by the image model with a neck of its own): a
+        # change is what is like neither
+        now, since = now
+        e = np.full(d.shape, 255., np.float32)
+        for dy in range(-3, 4):
+            for dx in range(-3, 4):
+                e = np.minimum(e, np.abs(v-np.roll(now, (dy, dx), (0, 1))).max(2))
+        d = np.where(since, np.minimum(d, cv2.GaussianBlur(e, (0, 0), 3)), d)
     # page white the fill cannot reach (closed in by a raised arm and the
     # hair) is still page where it was page at rest and the edit did not draw
     # over it (a white sleeve's flat inside is within what it redrew)
     paper = (v.min(2) > 246) & (np.ptp(v, 2) < 6)
     drawn = fill_holes(keep_large(d > 25, 3000), 20000)
-    page = paper & (figure < .5) & ~drawn
+    # a pixel or two of paper white lodged in an outline the edit drew is not
+    # page (here and below): as page it lets the page into the white sleeve
+    # behind that outline, and the sleeve's brightest pixels fade
+    page = keep_large(paper & (figure < .5) & ~drawn, 10)
     if hair_holes is not None:
         # the curls of the hair behind the body, uncovered as an arm moves off them
         # where an arm moved off: small gaps of page white the edit left between
@@ -101,20 +116,50 @@ def pose_layer(v, rest, figure, body, allowed, reach=None, hair_holes=None):
         holes, behind = hair_holes
         page |= paper & holes
         dark = v.mean(2) < 120
-        for c in components(paper & (body[1] > .5), 1):
+        for c in components(paper & (body[1] > .5), 10):
             ring = dilate(c, 3) & ~c
             if c.sum() < 800 and dark[ring].mean() > .3:
                 page |= c
-    fa = figure_alpha(v, fixed=True, page=page)   # fixed: a pale garment is not page
+    # fixed: a pale garment is not page; part: nor is white the figure had
+    # there at rest (a white shirt closed in by its outlines, not an arm moved off)
+    part = (figure > .5) & (rest.min(2) > 240)
+    fa = figure_alpha(v, fixed=True, page=page, part=part)
+    # white the figure had at rest and the edit kept as it was is still there:
+    # the page runs into a white shirt through a line the edit dropped (the end
+    # of a collar), and the matte calls it page
+    fa = np.where(part & (d < 25), np.maximum(fa, figure), fa)
+    # specks closed in by the figure (the brightest pixels of a white sleeve
+    # next to its outline, matted as half page) are solid
+    fa = np.where(fill_holes(fa > .9, 60), np.maximum(fa, 1.), fa)
     moved = cv2.GaussianBlur(np.abs(fa-figure), (0, 0), 3)
     raw = (d > 25) | (moved > .5)
     changed = fill_holes(keep_large(raw & allowed, 3000), 20000) & allowed
+    # a gesture moves what joins the body; a change apart from it is the edit
+    # redrawing something else (the loose strands round the hair)
+    on_body = dilate(body[1] > .5, 3)
+    changed &= np.logical_or.reduce([c for c in components(changed, 1) if (c & on_body).any()] or [np.zeros(changed.shape, bool)])
     if reach is not None:
         wide = fill_holes(keep_large(raw & reach, 3000), 20000) & reach
         _, lab = cv2.connectedComponents(wide.astype(np.uint8))
         hit = np.unique(lab[changed & wide])
         changed |= np.isin(lab, hit[hit > 0])
         allowed = reach
+    if hair is not None and hair.any():
+        # a gesture carries no hair: by the hair (and hat), where the body is not
+        # at rest, only what the edit drew thick (a hand, a sleeve: fingers are
+        # wide, strands are lines), not in the nearest hair's colour and not page
+        # white where the page was, stays, with its outline. The edit redraws the
+        # outline of the hair beside a raised hand; in the pose layer it stays put
+        # when the head turns. Where the body is at rest (an arm hanging by long
+        # hair, moved off) it stays as it was: dropped, the old arm would show
+        _, lab = cv2.distanceTransformWithLabels((~hair).astype(np.uint8), cv2.DIST_L2, 5,
+                                                 labelType=cv2.DIST_LABEL_PIXEL)
+        ys, xs = np.nonzero(hair)
+        hairlike = np.abs(v-rest[ys[lab-1], xs[lab-1]]).max(2) < 40
+        pale = (v.min(2) > 235) & (np.ptp(v, 2) < 10) & (figure < .5)
+        solid = (fa > .5) & changed & ~hairlike & ~pale
+        thick = dilate(cv2.morphologyEx(solid.astype(np.uint8), cv2.MORPH_OPEN, disk(4)) > 0, 4)
+        changed &= ~(dilate(hair, 20) & ~thick & (body[1] < .5))
     w = cv2.GaussianBlur(dilate(changed, 4).astype(np.float32), (0, 0), 2)*allowed
     fv = np.clip((v-(1-fa)[..., None]*WHITE)/np.maximum(fa, .05)[..., None], 0, 255)
     fv = nearest_fill(fv, fa > .98, (fa > 0) & (fa < .5))           # a faint edge takes the colour just inside
@@ -193,6 +238,7 @@ def run(art, folder, log=print):
     # parts that changed would count as redrawn by every edit, and a gesture
     # would bring the old drawing of them back
     ref = rest
+    changed_since = None
     if off.sum() > 500:
         changed_since = np.zeros(rest.shape[:2], bool)
         changed_since[pad_top:] = off
@@ -214,13 +260,27 @@ def run(art, folder, log=print):
         rows = lambda n: np.nonzero((L[n][1] > .5).any(1))[0]
         if max(rows(n).max() for n in hanging) > rows('Neck').max():
             reach = above < .5                                          # long hair: a raised arm goes over it
-    hair_holes = (fill_holes(below > .5, 20000) & (below < .1), below > .5)   # page closed in by, and hair behind the body
+    # page closed in by the hair behind the body, and that hair; a loop of
+    # loose strands nearly shut at rest counts (an edit may shut it)
+    shut = cv2.morphologyEx((below > .5).astype(np.uint8), cv2.MORPH_CLOSE, disk(7)) > 0
+    hair_holes = (fill_holes(shut, 20000) & (below < .1) & (figure < .5), below > .5)
+    hair = over([n for n in base if n.startswith(('Hair_', 'Hat'))], L)[1] > .5
     made, checks = [], []
     for edit_name, layer in POSES.items():
         if not (art/f'{edit_name}.png').exists():
             continue
         v, drift = edit(art/f'{edit_name}.png', rest, pad_top)
-        rgb, a, changed = pose_layer(v, ref, figure, body_flat, allowed, reach, hair_holes)
+        now = None
+        if changed_since is not None:
+            # a gap the layers had when R0-rest was made, page white there and so
+            # in the edit, since filled (the collar of a white shirt): where the
+            # edit kept it as page, it shows the layers as they are now, or the
+            # page would run through it into the shirt; where the image model
+            # painted over the gap, what is like the layers now is no change
+            filled = changed_since & (old.min(2) > 240) & (np.ptp(old, 2) < 8) & (figure > .5)
+            v = np.where((filled & (np.abs(v-old).max(2) < 25))[..., None], rest, v)
+            now = (rest, dilate(filled, 8))
+        rgb, a, changed = pose_layer(v, ref, figure, body_flat, allowed, reach, hair_holes, hair, now)
         save(folder, doc, layer, 'pose', rgb, a, after=body+[p for p in POSES.values()])
         L[layer] = (rgb, a)
         model, _ = over(base[:first]+[layer]+base[last+1:], L)

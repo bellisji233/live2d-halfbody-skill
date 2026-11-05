@@ -172,7 +172,8 @@ class Rig:
         v[:, 1] = pivot[1]+(v[:, 1]-pivot[1])*(1+b['breath']['scale']*p.get('ParamBreath', 0))
         v = _rotate(v, p.get('ParamBodyAngleZ', 0)*b['tilt_deg'], pivot)
         if L.role == 'cheek':
-            op *= float(p.get(self.char['cheek']['param'], 0))
+            # the flush is hidden at rest (op 0 there): the parameter alone shows it
+            op = float(p.get(self.char['cheek']['param'], 0))
         return v, float(op)
 
     # own parameters ------------------------------------------------------

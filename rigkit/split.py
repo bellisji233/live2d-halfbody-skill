@@ -72,7 +72,7 @@ def load(path, pad_top=0, size=None):
     return rgb
 
 
-def figure_alpha(rgb, tol=8, keep=None, fixed=False, page=None):
+def figure_alpha(rgb, tol=8, keep=None, fixed=False, page=None, part=None):
     """Character vs the flat white background: flood fill from every white
     border pixel, plus pockets of flat paper white near the edge (gaps
     between loose strands, between an arm and the body) that antialiasing
@@ -82,7 +82,9 @@ def figure_alpha(rgb, tol=8, keep=None, fixed=False, page=None):
     fixed: every filled pixel within tol of the white it started from, not
     of its neighbour, so the fill does not creep into a pale garment along
     a faint outline (no label map to hold it). page: pixels known to be the
-    page though the fill cannot reach them (white closed in by the figure)."""
+    page though the fill cannot reach them (white closed in by the figure).
+    part: pixels known to be a part other than hair (a white shirt): a
+    pocket of white mostly within them is that part, not the page."""
     h, w = rgb.shape[:2]
     work = np.clip(rgb, 0, 255).astype(np.uint8).copy()
     mask = np.zeros((h+2, w+2), np.uint8)
@@ -98,7 +100,7 @@ def figure_alpha(rgb, tol=8, keep=None, fixed=False, page=None):
     for i in range(1, n):
         if st[i, cv2.CC_STAT_AREA] < 40000:
             c = lab == i
-            if reach[c].any() and np.median(rgb[c].min(1)) >= 252:
+            if reach[c].any() and np.median(rgb[c].min(1)) >= 252 and not (part is not None and part[c].mean() > .5):
                 outside |= c
     ink = WHITE-rgb
     if keep is not None:
@@ -126,6 +128,12 @@ def figure_alpha(rgb, tol=8, keep=None, fixed=False, page=None):
         white_thing = (cv2.dilate(thick.astype(np.uint8), disk(4)) > 0) & (light > 0)
         plain = np.clip((253.-rgb.min(axis=2))/9., 0, 1)
         a = np.where(white_thing | (den < 40.**2), plain, a)
+        # a white thing fades only where the page reaches it without crossing
+        # ink: behind its outline (a white sleeve) it is solid; thin gaps
+        # between strands keep their matte
+        n, lab = cv2.connectedComponents((outside | (band & (ink.max(2) <= 70))).astype(np.uint8), connectivity=4)
+        shut = ~np.isin(lab, np.unique(lab[outside]))
+        a = np.where(shut & white_thing, 1., a)
         alpha[band] = np.minimum(alpha[band], a[band])
     return alpha.astype(np.float32)
 
@@ -252,6 +260,18 @@ def nearest_fill(rgb, src, dst):
     return out
 
 
+def art_figure(B, s1):
+    """The figure of the art (alpha) and the label keys of its colour-block
+    variant s1 (aligned to it). s1 holds white areas it paints (a pom-pom, a
+    collar) and white clothes closed in by their outlines (a T-shirt between
+    the straps); a white gap between strands it paints as hair stays page."""
+    keys = [k for k in LABEL_ORDER if k != 'tail' or twin_tails(s1)]
+    near = {k: np.abs(s1-np.float32(PALETTE[k])).max(2) < 110 for k in keys}
+    painted = np.logical_or.reduce(list(near.values()))
+    part = erode(np.logical_or.reduce([near[k] for k in keys if k in ('hat', 'face', 'body', 'neck')]), 3)
+    return figure_alpha(B, keep=erode(painted, 3), part=part), keys
+
+
 def label_map(img, figure, keys, min_area=150, complete=True):
     """Flat-colour variant -> one mask per palette key. Each pixel goes to
     the nearest palette colour; specks and pin holes are cleaned; figure
@@ -314,6 +334,34 @@ def matte(with_part, without, region, hi=60., lo=10., grow=4):
     a[core] = 1.
     rgb = np.where((a >= .9)[..., None], with_part, F)
     return rgb, a
+
+
+def faint_crease(v, blank, region, rgb, a, lo=18):
+    """A lid crease too faint to seed the matte: drawn in the base as in the
+    closed eye, it cancels out of closed minus base; against the blank face
+    (V5) it shows, as long thin arcs of faint difference just above the lid
+    line. Noise is not a long arc; a glasses frame is farther above."""
+    pieces = components(a > .25, 1)
+    if not pieces:
+        return rgb, a
+    main = max(pieces, key=lambda c: c.sum())
+    ys, xs = np.nonzero(main)
+    w = xs.max()-xs.min()+1
+    d = np.abs(v-blank).max(2)
+    add = np.zeros(a.shape, bool)
+    for c in components((d > lo) & region & ~dilate(a > .25, 1), 10):
+        cy, cx = np.nonzero(c)
+        span = cx.max()-cx.min()+1
+        if span >= .3*w and c.sum()/span <= 4.5 and ys.min()-.25*w <= cy.mean() < ys.mean():
+            add |= c
+    if not add.any():
+        return rgb, a
+    # the breaks along the arc, where it fades under lo, closed; its own colour
+    # (the matte under the lash gave the lash's colour to faint pixels)
+    add = cv2.morphologyEx(_u8(add), cv2.MORPH_CLOSE, np.ones((1, 9), np.uint8)) > 0
+    crgb, fa = matte(v, blank, dilate(add, 1) & region, hi=lo, lo=8, grow=None)
+    take = fa > a
+    return np.where(take[..., None], crgb, rgb), np.maximum(a, fa)
 
 
 def tidy(a, reach=.6, min_area=12, hair=None):
@@ -723,9 +771,7 @@ def plan(art, out, pad_top=0, hat='Hat', log=print):
     have = lambda n: (art/f'{n}.png').exists()
 
     s1 = V('S1-segment')
-    keys = [k for k in LABEL_ORDER if k != 'tail' or twin_tails(s1)]
-    painted = np.stack([np.abs(s1-np.float32(PALETTE[k])).max(2) for k in keys], 2).min(2) < 110
-    fig_a = figure_alpha(B, keep=erode(painted, 3))
+    fig_a, keys = art_figure(B, s1)
     fig = fig_a > .5
     S = label_map(s1, fig, keys)
     if 'tail' in S:
@@ -828,6 +874,8 @@ def plan(art, out, pad_top=0, hat='Hat', log=print):
                 # the closed eye keeps its crease, as the smile eye does: it shows
                 # once the eye is all but shut (eyes.closed_swap)
                 rgb, a = matte(V(src), blank(src), zone & erode(face, 5))
+                if nm == 'Closed':
+                    rgb, a = faint_crease(V(src), v5, zone & erode(face, 5), rgb, a)
                 a = tidy(a, hair=above)
                 L.append((f'Eye_{nm}_{side}', rgb, a, False))
         if e['lower'].any():

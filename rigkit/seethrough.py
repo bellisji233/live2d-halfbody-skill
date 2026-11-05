@@ -529,6 +529,17 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
         rest = cut[..., None]*rest+(1-cut[..., None])*255.
         log(f'  头发围住的白纸缝挖空：{int(pocket.sum())} px')
     off = (np.abs(rest-B).max(2) > MISS) & (figure_alpha(B) > .5)
+    # or nothing drawn where our split has the figure: on the white page a gap
+    # over pale skin is too close in colour to show (the neck See-through ends
+    # short of the collar). Not over page white: our split may hold a patch of
+    # page shut in by the hair (between twin tails and the neck) as figure
+    a_st, a_own = np.zeros((H, W), np.float32), np.zeros((H, W), np.float32)
+    for n in order[::-1]:
+        if vis[n]:
+            a = shapes[n][1] if n in shapes else R[n][1]
+            a_st = a+(1-a)*a_st
+            a_own = R[n][1]+(1-R[n][1])*a_own
+    off |= (a_st < .5) & (a_own > .5) & ~paper & ~dilate(pocket, 2)
     disk = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*MISS_WIDTH+1, 2*MISS_WIDTH+1))
     wrong = keep_large(cv2.morphologyEx(off.astype(np.uint8), cv2.MORPH_OPEN, disk) > 0, MISS_AREA)
     if wrong.any():
@@ -571,6 +582,17 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
             for u in order[:k]:
                 if vis[u] and u in shapes:
                     shapes[u] = (shapes[u][0], (shapes[u][1]*(1-m)).astype(np.float32))
+            # and on a little under the layers above it, as far as ours has it:
+            # their soft edge then lies on it, not on the page (a dotted seam
+            # where the neck taken from ours meets the collar)
+            a_up = 1-np.prod([1-(shapes[u][1] if u in shapes else R[u][1]) for u in order[:k] if vis[u]]
+                             or [np.ones((H, W), np.float32)], 0)
+            a_all = 1-np.prod([1-(shapes[u][1] if u in shapes else R[u][1]) for u in order if vis[u]], 0)
+            # only where the page still shows a little through the two edges
+            under = dilate(m > .05, 4) & (R[n][1] > .5) & dilate(a_up > .5, 4) & (shapes[n][1] < .99) & (a_all < .97)
+            if under.any():
+                colour[n] = np.where((under & (shapes[n][1] < .5))[..., None], R[n][0], colour[n])
+                shapes[n] = (shapes[n][0], np.where(under, np.maximum(shapes[n][1], R[n][1]), shapes[n][1]).astype(np.float32))
             log(f'  {n}：See-through 缺画或画错的 {int((wrong & (shown == k)).sum())} px'
                 +(f'、内部的洞 {int(holes.sum())} px' if holes.any() else '')+' 用自拆')
 
@@ -652,6 +674,20 @@ def plan_as_drawn(art, base_layers, out, pad_top=0, log=print):
             filled.append(f'{n} {int(c.sum())} px')
     if filled:
         log(f'  静止时露底的窄缝用原画补上：{"、".join(filled)}')
+    if 'Face_Skin' in shapes:
+        # a pinhole in the face skin, closed in by the skin itself, that nothing
+        # covers at rest (a pure white highlight between two strands of the
+        # bangs: page white to the checks above): the skin round it fills it
+        fs = shapes['Face_Skin'][1] > .5
+        hole = fill_holes(fs, 60) & ~fs & (a_rest < .5)
+        if hole.any():
+            # with the half-transparent ring round it: left, it shows as a pale
+            # ring when the bangs move off it with the head
+            m = hole | (dilate(hole, 3) & (shapes['Face_Skin'][1] < .99))
+            colour['Face_Skin'] = cv2.inpaint(np.clip(colour['Face_Skin'], 0, 255).astype(np.uint8), _u8(m), 3,
+                                              cv2.INPAINT_TELEA).astype(np.float32)
+            shapes['Face_Skin'] = (shapes['Face_Skin'][0], np.maximum(shapes['Face_Skin'][1], m).astype(np.float32))
+            log(f'  Face_Skin：脸上被皮肤围住的小洞补上，{int(hole.sum())} px')
 
     s1 = art/'S1-segment.png'
     s1 = align(load(s1, pad_top), B)[0] if s1.exists() and 'Hair_Back' in shapes else None
