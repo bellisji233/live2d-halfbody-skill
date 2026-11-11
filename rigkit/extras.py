@@ -76,7 +76,9 @@ def edit(path, rest, pad_top):
     """An edit of R0-rest on the layers' canvas, shifted and colour-matched onto it."""
     v = load(path, pad_top, (rest.shape[1], rest.shape[0]-pad_top))
     v, shift, _ = align(v, rest)
+    paper = (v.min(2) > 246) & (np.ptp(v, 2) < 6)    # page white, before the colours move
     v, _ = match_colours(v, rest)
+    v[paper] = 255.                                   # the fit is made off the page and can tint it: pose_layer then finds no page
     return v, float(np.hypot(*shift))
 
 
